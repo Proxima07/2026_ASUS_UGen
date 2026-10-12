@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Api} from '../js/api.js?rev=web-v7';
-import {Bridge} from '../js/bridge.js?rev=web-v7';
-import {CaptureCoordinator,CaptureSession,NativeCaptureSession} from '../js/capture.js?rev=web-v7';
-import {VoiceFlow} from '../js/voice.js?rev=web-v7';
-import {Recorder} from '../js/recorder.js?rev=web-v7';
+import {Api} from '../js/api.js?rev=web-v8';
+import {Bridge} from '../js/bridge.js?rev=web-v8';
+import {CaptureCoordinator,CaptureSession,NativeCaptureSession} from '../js/capture.js?rev=web-v8';
+import {VoiceFlow} from '../js/voice.js?rev=web-v8';
+import {Recorder} from '../js/recorder.js?rev=web-v8';
 
 const deferred=()=>{let resolve;const promise=new Promise(ok=>resolve=ok);return {promise,resolve};};
 const response=(status,value)=>({ok:status>=200&&status<300,status,json:async()=>value});

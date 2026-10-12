@@ -1,5 +1,14 @@
 # 網頁更新紀錄
 
+## web_v8 — 2026-10-12
+
+- APK網頁先等hello／ready，再查同來源Cookie /me，不在原生session同步前提前認證。
+- /me必須auth_kind=session，user_id與device_id完全等於APK；未核對不載入私人筆記／操作，不啟用錄音。
+- Cookie401每頁至多自動hello一次，預算不因成功重置；另提供「重新建立登入」手動重試，合併未完成握手且有60秒期限。
+- 遲到舊401／回覆不能覆蓋新登入。網路、HTML、代理與身分不一致不自動重新配對或無限同步。
+- 將generic配對提示改成APK／網頁分階段狀態；新增摺疊HTTP／安全錯誤碼／request ID診斷，不顯示憑證。
+- 全部134項Node測試通過，新增7項登入回歸；未在目標手機驗證實際Cookie問題。本版需android_v6，不變動backend_v6／共用協定。
+
 ## web_v7 — 2026-10-12
 
 - APK語音首頁優先使用原生檔案錄音，綁定ready身分／recordingID；原生上傳後僅收job/trace回覆，接既有STT／Agent。

@@ -1,5 +1,5 @@
-// @web-revision: web-v7
-import {identifier} from './state.js?rev=web-v7';
+// @web-revision: web-v8
+import {identifier} from './state.js?rev=web-v8';
 export function validBridgeMessage(value) {
   return Boolean(value && typeof value==='object' && !Array.isArray(value) && value.protocol_version==='1' && typeof value.type==='string' && ['ready','action_result','error','logged_out','recording_started','recording_progress','recording_stopping','recording_uploading','recording_uploaded','recording_cancelled'].includes(value.type));
 }
@@ -9,15 +9,22 @@ export class Bridge {
     this.nativePresent=Boolean(globalThis.NativeBridge && typeof globalThis.NativeBridge.postMessage==='function');
     if(!this.nativePresent){this.onChange();return;}
     globalThis.NativeBridge.onmessage=(event)=>this.receive(event.data);
-    this.send({type:'hello'});
-    this.helloTimer=setTimeout(()=>{if(!this.ready)this.onError('手機橋接尚未就緒，請重新開啟 APK。');},8000);
-    this.onChange();
+    try{this.refreshSession();}catch(error){this.onError(error?.message||'APK 登入同步無法開始。',{request_type:'hello',error:{code:'native_bridge_send_failed'}});this.onChange();}
   }
   send(value){
     if(!this.nativePresent)throw new Error('這項功能需要從 Android APK 開啟。');
     const message={protocol_version:'1',message_id:identifier('msg'),...value};
     this.pending.set(message.message_id,message);
     try{globalThis.NativeBridge.postMessage(JSON.stringify(message));}catch(error){this.pending.delete(message.message_id);throw error;}return message.message_id;
+  }
+  refreshSession(){
+    if(!this.nativePresent)throw new Error('重新建立手機登入需要從 Android APK 開啟。');
+    if(this.helloMessageId&&this.pending.has(this.helloMessageId))return this.helloMessageId;
+    this.ready=false;this.helloMessageId=identifier('hello');const id=this.helloMessageId;
+    clearTimeout(this.helloTimer);
+    this.helloTimer=setTimeout(()=>{if(this.helloMessageId!==id)return;this.pending.delete(id);this.helloMessageId=null;this.helloTimer=null;this.onError('APK 登入同步等待逾時。請按「重新建立登入」再試。',{request_type:'hello',error:{code:'native_session_timeout'}});this.onChange();},60000);
+    try{this.send({type:'hello',message_id:id});}catch(error){clearTimeout(this.helloTimer);this.helloTimer=null;this.helloMessageId=null;throw error;}
+    this.onChange();return id;
   }
   supports(kind){return this.ready && this.capabilities.has(kind);}
   bindSession(identity){this.sessionIdentity=identity?{user_id:identity.user_id,device_id:identity.device_id}:null;}
@@ -65,9 +72,9 @@ export class Bridge {
     if(value.type==='action_result'&&(sent.type!=='execute_action'||sent.action_id!==value.action_id))return;
     if(value.type==='logged_out'&&sent.type!=='logout')return;
     this.pending.delete(value.message_id);
-    if(value.type==='ready'){clearTimeout(this.helloTimer);this.capabilities=new Set(Array.isArray(value.capabilities)?value.capabilities.filter(x=>typeof x==='string'):[]);this.recording=value.recording?.protocol_version==='1'?value.recording:null;this.identity=value.identity||null;this.ready=true;this.onChange();}
+    if(value.type==='ready'){clearTimeout(this.helloTimer);this.helloTimer=null;this.helloMessageId=null;this.capabilities=new Set(Array.isArray(value.capabilities)?value.capabilities.filter(x=>typeof x==='string'):[]);this.recording=value.recording?.protocol_version==='1'?value.recording:null;this.identity=value.identity||null;this.ready=true;this.onChange();}
     else if(value.type==='action_result')this.onResult(value);
     else if(value.type==='logged_out'){this.cancelRecording();this.pending.clear();this.ready=false;this.capabilities.clear();this.recording=null;this.identity=null;this.onLogout();this.onChange();}
-    else this.onError(value.error?.message || value.message || '手機操作未完成，請重新確認。',{...value,action_id:sent.action_id,request_type:sent.type});
+    else {if(sent.type==='hello'){clearTimeout(this.helloTimer);this.helloTimer=null;this.helloMessageId=null;this.ready=false;}this.onError(value.error?.message || value.message || '手機操作未完成，請重新確認。',{...value,action_id:sent.action_id,request_type:sent.type});}
   }
 }

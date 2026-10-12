@@ -1,18 +1,30 @@
-# 語音助理網頁 web_v7
+# 語音助理網頁 web_v8
 
-v7 是 web_v6 的差異更新，搭配 backend_v6／android_v5。APK 語音首頁改用手機原生錄音，停止後上傳完整檔案；畫面明確呈現收聽、經過時間、紅色結束／取消、STT 與 Agent 階段。手機記事本指手機安裝的記事本 App，平台筆記則採用後端修正後的裝置隔離。
+v8 是 web_v7 的差異更新，搭配既有 backend_v6／android_v6。這次修正 APK 已保存配對、網站卻仍要求配對的登入流程：先等 APK 握手，再驗證網頁 Cookie 與確切裝置身分；不同登入階段有明確提示與重試入口。保留原生完整音檔錄音、手機記事本交接與平台筆記隔離。
 
 本專案是原生 HTML／CSS／JavaScript，不需要 npm install 或前端 build。圖示與資源由同一網站提供，不使用 CDN、第三方分析、Web Speech API 或雲端語音辨識。
 
 ## 安裝與開啟
 
-1. 保留 local-assistant/web 與 backend 並列的結構，差異包依序覆蓋至 web_v7；ZIP 已包含 local-assistant 外層，解壓到它的上一層。
-2. 後端更新至 backend_v6，APK 更新 android_v5。原生錄音不能只靠更新網頁取得；需要新 APK 能力握手。
+1. 保留 local-assistant/web 與 backend 並列的結構，差異包依序覆蓋至 web_v8；ZIP 已包含 local-assistant 外層，解壓到它的上一層。
+2. 後端更新至 backend_v6，APK 更新 android_v6。原生錄音不能只靠更新網頁取得；需要新 APK 能力握手。
 3. 既有 .env 配置實際 PUBLIC_BASE_URL，例如 https://2026-asus-ugen.aphelion.tw。WEB_DIR=../web 相對 backend，或填實際目錄的絕對路徑。
 4. 重啟後端，沿用已配置的 cloudflared。整個 hostname 的網站、/health、/v1/* 指向同一後端，不需要第二個 connector。
 5. 強制重新整理一般瀏覽器，或重新開啟 APK。Chrome 配對需一組新碼；APK 由原生配對後注入 HttpOnly Cookie。
 
 後端提供網站與 API，不能以 python -m http.server 取代整個服務。
+
+## APK 已配對、網站仍要求登入
+
+APK「返回已配對助理」只表示手機保存了裝置憑證；能否使用仍須後端驗證。APK bearer 配對與網頁 Cookie 登入是兩個步驟，不能將 WebView 接受 setCookie 的回呼當成後端已認證。
+
+新 APK 先驗證原生裝置憑證，再建立／安裝 session，讀取 CookieManager 實際 cookie，以只帶 Cookie、不帶 bearer 的 GET /v1/auth/me 核對後端身分。網站先等 hello／ready，再以自己的同來源 Cookie 呼叫 /me；只有 auth_kind=session 且 user_id、device_id 都與 APK 一致，才載入私人筆記、操作或啟用麥克風。
+
+首次等候顯示「正在等候 APK 登入同步」。Cookie HTTP401 每個頁面至多自動重新同步一次；成功不會重設此預算。仍失敗可按「重新建立登入」或 APK 上方「同步」，沿用已保存憑證，不重複兌換配對碼。握手等待上限60秒，遲到舊401不能覆蓋新登入。
+
+只有確認原生裝置憑證失效才顯示配對失效；Cookie、網路、代理、HTML或轉址錯誤各自說明，不當作未配對。展開「連線處理資訊」可看 APK／網頁階段、HTTP狀態、安全錯誤碼與request ID，不顯示cookie、token或配對碼。身分不一致時清私人畫面並停止手機操作，不改採任意已有Cookie。
+
+重新同步只處理登入，不重播對話指令或已執行手機動作。若仍失敗，使用新 APK 的登入診斷定位階段；不要因Cookie失敗先清App資料、解除配對或重新產生配對碼。已提供的截圖不能單獨證明實機失敗是Cookie、時序還是代理造成，需以新診斷結果確認。
 
 ## 語音首頁
 
@@ -50,7 +62,7 @@ Android 沒有供所有記事本 App 共用的查詢／讀取／更新 API。本
 
 ## 載入、連線與隱私
 
-bootstrap 先驗證 CSS／JavaScript 的 HTTP、MIME 和 web-v7 版本標記；檔案缺少或混版時列出路徑，保留連線設定與重新載入，不啟動半套功能。麥克風圖示內嵌於 HTML。404 時先檢查實際 WEB_DIR 與解壓位置，再看 Tunnel 路由／快取。
+bootstrap 先驗證 CSS／JavaScript 的 HTTP、MIME 和 web-v8 版本標記；檔案缺少或混版時列出路徑，保留連線設定與重新載入，不啟動半套功能。麥克風圖示內嵌於 HTML。404 時先檢查實際 WEB_DIR 與解壓位置，再看 Tunnel 路由／快取。
 
 連線排錯先開 /health；應為 status=ok 的後端 JSON。未配對時 /v1/auth/me 回 401 JSON，表示 API 已到達。轉址、403 或 HTML 可能來自 Cloudflare Access／WAF／路由，APK 不共用 Chrome 登入 Cookie；不以略過 TLS 修正。
 
@@ -67,6 +79,6 @@ cd local-assistant/web
 node --test tests/*.test.js
 ```
 
-測試數量與目標手機界線見 STATUS.md；mock 測試通過不代表真實麥克風、STT 或廠牌記事本已驗收。更新內容見 CHANGELOG.md 與 docs/web_v7.md。
+測試數量與目標手機界線見 STATUS.md；mock 測試通過不代表真實麥克風、STT 或廠牌記事本已驗收。更新內容見 CHANGELOG.md 與 docs/web_v8.md。
 
-本版全部127項Node測試通過；另以本地後端驗證有效.m4a、mock STT／Agent、記事本handed_off與跨裝置隔離。
+本版全部134項Node測試通過，含7項登入同步回歸。原有音檔、記事本與隔離測試保留；尚未在目標手機驗證此次 Cookie 行為。

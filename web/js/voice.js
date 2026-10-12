@@ -1,8 +1,8 @@
-// @web-revision: web-v7
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v7';
-import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v7';
-import {uncertainResponse} from './conversation.js?rev=web-v7';
-export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v7';
+// @web-revision: web-v8
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v8';
+import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v8';
+import {uncertainResponse} from './conversation.js?rev=web-v8';
+export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v8';
 
 const VOICE_BUSY=new Set(['requesting','recording','stopping','uploading','received_audio','queued','transcribing','transcribed','sending','received_request','understanding','dispatching','waiting','reading_result','sending_selection','selecting']);
 const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.create_native','notes.share']);

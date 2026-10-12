@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
@@ -29,6 +31,9 @@ import com.proxima.localassistant.network.ApiException
 import com.proxima.localassistant.network.ConnectionDiagnostics
 import com.proxima.localassistant.network.ConnectionFailure
 import com.proxima.localassistant.network.ConnectionPhase
+import com.proxima.localassistant.network.LoginDiagnosticsStore
+import com.proxima.localassistant.network.PairedLoginIdentity
+import com.proxima.localassistant.network.SessionCookiePolicy
 import com.proxima.localassistant.permissions.PermissionController
 import com.proxima.localassistant.security.DeviceCredential
 import com.proxima.localassistant.security.DeviceCredentialStore
@@ -45,11 +50,13 @@ class MainActivity : Activity() {
         private val APP_ACTIVITY_VERSION = AtomicLong()
         // CookieManager is process-global, so its asynchronous mutation queue must be too.
         private var cookieInstallRunning = false
+        private var cookieQueueStalled = false
         private var pendingCookieInstall: (() -> Unit)? = null
     }
     private val worker = APP_WORKER
     private lateinit var credentials: DeviceCredentialStore
     private lateinit var permissions: PermissionController
+    private lateinit var loginDiagnostics: LoginDiagnosticsStore
     private lateinit var receipts: ExecutionReceiptStore
     private var webView: WebView? = null
     private var bridge: BridgeController? = null
@@ -60,11 +67,14 @@ class MainActivity : Activity() {
     private var currentCredential: DeviceCredential? = null
     private var foreground = false
     private var activityVersion = 0L
+    private var loginStatus: TextView? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         activityVersion = APP_ACTIVITY_VERSION.incrementAndGet()
         credentials = DeviceCredentialStore(this)
+        loginDiagnostics = LoginDiagnosticsStore(this)
         permissions = PermissionController(this)
         val credential = try { credentials.load() } catch (_: Exception) {
             toast("裝置憑證無法解密，請重新配對")
@@ -80,6 +90,7 @@ class MainActivity : Activity() {
         bridge?.cancelRecording("navigation")
         webView?.let { it.stopLoading(); it.destroy() }
         webView = null; bridge = null
+        loginStatus = null
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(28), dp(24), dp(24))
             setBackgroundColor(Color.rgb(247, 249, 246))
@@ -93,7 +104,10 @@ class MainActivity : Activity() {
         val origin = EditText(this).apply { hint = "https://assistant.example.com"; setText(previous?.origin.orEmpty()); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; setSingleLine(true) }
         val label = EditText(this).apply { hint = "裝置名稱"; setText("Android ${Build.MODEL}".take(100)); setSingleLine(true) }
         val code = EditText(this).apply { hint = "一次性配對碼"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; setSingleLine(true) }
-        val status = TextView(this).apply { text = initialMessage; textSize = 14f; setPadding(0, dp(16), 0, dp(16)); setTextIsSelectable(true) }
+        val status = TextView(this).apply {
+            text = initialMessage.ifBlank { previous?.let { loginDiagnostics.read(it) }.orEmpty() }
+            textSize = 14f; setPadding(0, dp(16), 0, dp(16)); setTextIsSelectable(true)
+        }
         column.addView(origin); column.addView(label); column.addView(code); column.addView(status)
         val health = Button(this).apply { text = "檢查後端連線" }
         val pair = Button(this).apply { text = "配對並開啟助理" }
@@ -154,12 +168,20 @@ class MainActivity : Activity() {
             }
         }
         if (previous != null) {
+            column.addView(TextView(this).apply {
+                text = "已保存配對資料\n網頁登入失敗不會移除 APK 裝置憑證；可先檢查已配對登入，再重建網頁登入。"
+                textSize = 15f; setPadding(0, dp(14), 0, dp(8))
+            })
+            val diagnose = Button(this).apply { text = "檢查已配對登入"; setOnClickListener {
+                busy(true)
+                checkPairedLogin(previous, ::active, { message -> status.text = message }) { busy(false) }
+            } }
             val resume = Button(this).apply { text = "返回已配對助理"; setOnClickListener { openAssistant(previous) } }
             val revoke = Button(this).apply { text = "停用裝置並解除配對"; setOnClickListener {
                 busy(true); revoke(previous, status) { if (active()) busy(false) }
             } }
-            controls.add(resume); controls.add(revoke)
-            column.addView(resume); column.addView(revoke)
+            controls.add(diagnose); controls.add(resume); controls.add(revoke)
+            column.addView(diagnose); column.addView(resume); column.addView(revoke)
         }
         column.addView(TextView(this).apply {
             text = "首次使用：管理者依 backend README 產生配對碼。\n管理金鑰不輸入手機。檢查連線不會消耗配對碼。\n已配對但登入失敗時，使用「返回已配對助理」重試。"; textSize = 14f; setPadding(0, dp(22), 0, 0)
@@ -197,6 +219,11 @@ class MainActivity : Activity() {
             }, { error -> toast(ConnectionDiagnostics.describe(error, ConnectionPhase.SESSION_REQUEST, api.origin)) })
         } }, LinearLayout.LayoutParams(0, dp(52), 1f))
         root.addView(toolbar)
+        loginStatus = TextView(this).apply {
+            text = loginDiagnostics.read(credential)
+            textSize = 13f; setPadding(dp(16), dp(6), dp(16), dp(8)); setTextIsSelectable(true)
+        }
+        root.addView(loginStatus)
         val view = WebView(this)
         webView = view
         view.setBackgroundColor(Color.rgb(247,249,246))
@@ -280,37 +307,169 @@ class MainActivity : Activity() {
                 "\n裝置憑證仍已保存；連線恢復後按「返回已配對助理」重試，無需再使用配對碼。")
         })
     }
-    private fun refreshSession(api: NativeApiClient, ready: () -> Unit, failed: (Exception) -> Unit) {
+    private fun nativeIdentity(api: NativeApiClient, credential: DeviceCredential): PairedLoginIdentity {
+        val identity = try { api.me() } catch (error: ApiException) {
+            if (error.status == 401 && error.code == "unauthorized") throw ApiException(401, "native_device_revoked",
+                "後端拒絕 APK 裝置憑證；本機配對資料仍保留", error.httpRequestId)
+            throw error
+        }
+        return PairedLoginIdentity.native(identity, credential.deviceId)
+    }
+    private fun proveBrowserCookie(api: NativeApiClient, cookieHeader: String, identity: PairedLoginIdentity) {
+        val browserIdentity = try { api.browserCookieMe(cookieHeader) } catch (error: ApiException) {
+            if (error.status == 401 && error.code == "unauthorized") throw ApiException(401, "session_cookie_unauthorized",
+                "後端拒絕網頁 Cookie 登入；APK 配對憑證仍保留", error.httpRequestId)
+            throw error
+        }
+        PairedLoginIdentity.proveCookie(browserIdentity, identity)
+    }
+    private fun refreshSession(api: NativeApiClient, ready: (PairedLoginIdentity) -> Unit, failed: (Exception) -> Unit) {
         val expectedScreen = screenVersion
         val expectedSession = ++sessionVersion
         val expectedView = webView
-        val expectedCredential = currentCredential
+        val expectedCredential = currentCredential ?: return
         fun current(): Boolean = isCurrentActivity() && screenVersion == expectedScreen &&
             sessionVersion == expectedSession && webView === expectedView && currentCredential === expectedCredential &&
-            expectedCredential?.origin == api.origin
+            expectedCredential.origin == api.origin
+        fun progress(phase: ConnectionPhase) {
+            runOnUiThread { if (current()) loginStatus?.text = loginDiagnostics.progress(expectedCredential, phase) }
+        }
+        fun failure(error: Exception, phase: ConnectionPhase) {
+            if (!current()) return
+            val safeError = ConnectionFailure(phase, error, api.origin)
+            loginStatus?.text = loginDiagnostics.failed(expectedCredential, safeError, phase)
+            failed(safeError)
+        }
+        progress(ConnectionPhase.NATIVE_DEVICE_CHECK)
+        if (cookieQueueStalled) {
+            failure(ApiException(0, "session_cookie_queue_stalled", "Cookie 操作逾時"), ConnectionPhase.SESSION_COOKIE)
+            return
+        }
         worker.execute {
+            var phase = ConnectionPhase.NATIVE_DEVICE_CHECK
             try {
+                val identity = nativeIdentity(api, expectedCredential)
+                phase = ConnectionPhase.SESSION_REQUEST
+                progress(phase)
                 val response = api.session()
-                if (response.first.optString("device_id") != expectedCredential?.deviceId)
-                    throw ApiException(0, "session_identity_mismatch", "網頁登入與已配對裝置身分不一致")
-                val cookies = response.second.filter { it.startsWith("local_assistant_session=") }
-                if (cookies.size != 1 || !cookies[0].contains("httponly", true) || !cookies[0].contains("secure", true))
-                    throw ApiException(0, "session_cookie_invalid", "登入 Cookie 不符合安全要求")
+                if (response.first.opt("device_id") != identity.deviceId)
+                    throw ApiException(200, "session_identity_mismatch", "網頁登入與已配對裝置身分不一致")
+                phase = ConnectionPhase.SESSION_COOKIE
+                val cookies = response.second.filter { it.substringBefore(';').substringBefore('=').trim() == "local_assistant_session" }
+                if (cookies.size != 1) throw ApiException(200, "session_cookie_invalid", "登入 Cookie 數量不符合要求")
+                val freshToken = SessionCookiePolicy.freshToken(cookies.single())
                 runOnUiThread {
                     if (!current()) return@runOnUiThread
-                    // Serialize asynchronous CookieManager writes. An old account's in-flight
-                    // installation must finish before the new account can load its page.
-                    queueCookieMutation(::current) { done ->
-                        CookieManager.getInstance().setCookie("${api.origin}/", cookies[0]) { accepted ->
-                            if (current()) {
-                                if (accepted) { CookieManager.getInstance().flush(); ready() }
-                                else failed(ConnectionFailure(ConnectionPhase.SESSION_COOKIE, IllegalStateException("Cookie rejected"), api.origin))
+                    // Hold the process-global cookie queue until backend proof completes.
+                    // Another account must never overwrite cookies before this proof publishes ready.
+                    queueCookieMutation(::current, { error -> failure(error, ConnectionPhase.SESSION_COOKIE) }) { done ->
+                        loginStatus?.text = loginDiagnostics.progress(expectedCredential, ConnectionPhase.SESSION_COOKIE)
+                        var callbackSettled = false
+                        val timeout = Runnable {
+                            if (!callbackSettled) {
+                                callbackSettled = true
+                                cookieQueueStalled = true
+                                failure(ApiException(0, "session_cookie_queue_stalled", "Cookie 操作逾時"), ConnectionPhase.SESSION_COOKIE)
+                                val queued = pendingCookieInstall
+                                pendingCookieInstall = null
+                                queued?.invoke()
+                                // Do not release a possibly still-running global mutation: its
+                                // eventual callback releases the queue without proving or loading.
                             }
+                        }
+                        mainHandler.postDelayed(timeout, 5000)
+                        try {
+                            CookieManager.getInstance().setCookie("${api.origin}/", cookies.single()) { accepted ->
+                                mainHandler.removeCallbacks(timeout)
+                                if (callbackSettled || !current()) { done(); return@setCookie }
+                                callbackSettled = true
+                                if (!accepted) {
+                                    failure(ApiException(0, "session_cookie_rejected", "WebView 未接受登入 Cookie"), ConnectionPhase.SESSION_COOKIE)
+                                    done(); return@setCookie
+                                }
+                                try {
+                                    CookieManager.getInstance().flush()
+                                    val cookieHeader = SessionCookiePolicy.requestHeader(
+                                        CookieManager.getInstance().getCookie("${api.origin}/v1/auth/me"), freshToken)
+                                    loginStatus?.text = loginDiagnostics.progress(expectedCredential, ConnectionPhase.SESSION_COOKIE_VERIFY)
+                                    worker.execute {
+                                        try {
+                                            // Explicit Cookie-only request. No Bearer credential can mask failure.
+                                            proveBrowserCookie(api, cookieHeader, identity)
+                                            runOnUiThread {
+                                                try {
+                                                    if (current()) {
+                                                        loginStatus?.text = loginDiagnostics.ready(expectedCredential)
+                                                        ready(identity)
+                                                    }
+                                                } catch (error: Exception) { failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY) }
+                                                finally { done() }
+                                            }
+                                        } catch (error: Exception) { runOnUiThread {
+                                            failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY)
+                                            done()
+                                        } }
+                                    }
+                                } catch (error: Exception) {
+                                    failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY)
+                                    done()
+                                }
+                            }
+                        } catch (error: Exception) {
+                            callbackSettled = true
+                            mainHandler.removeCallbacks(timeout)
+                            failure(error, ConnectionPhase.SESSION_COOKIE)
                             done()
                         }
                     }
                 }
-            } catch (error: Exception) { runOnUiThread { if (current()) failed(ConnectionFailure(ConnectionPhase.SESSION_REQUEST, error, api.origin)) } }
+            } catch (error: Exception) { runOnUiThread { failure(error, phase) } }
+        }
+    }
+    /** GET only: does not consume a pairing code, create a session, write cookies or replace credentials. */
+    private fun checkPairedLogin(credential: DeviceCredential, active: () -> Boolean, status: (String) -> Unit, finished: () -> Unit) {
+        fun failure(error: Exception, phase: ConnectionPhase) {
+            if (active()) {
+                status(loginDiagnostics.failed(credential, error, phase))
+                finished()
+            }
+        }
+        val api = try { NativeApiClient(credential.origin, credential.token) } catch (error: Exception) {
+            failure(error, ConnectionPhase.NATIVE_DEVICE_CHECK)
+            return
+        }
+        status(loginDiagnostics.progress(credential, ConnectionPhase.NATIVE_DEVICE_CHECK))
+        if (cookieQueueStalled) {
+            failure(ApiException(0, "session_cookie_queue_stalled", "Cookie 操作逾時"), ConnectionPhase.SESSION_COOKIE_VERIFY)
+            return
+        }
+        worker.execute {
+            try {
+                val identity = nativeIdentity(api, credential)
+                runOnUiThread {
+                    if (!active()) return@runOnUiThread
+                    // Read proof shares the queue so no account can mutate its cookies mid-check.
+                    queueCookieMutation(active, { error -> failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY) }) { done ->
+                        status(loginDiagnostics.progress(credential, ConnectionPhase.SESSION_COOKIE_VERIFY))
+                        try {
+                            val cookieHeader = SessionCookiePolicy.requestHeader(
+                                CookieManager.getInstance().getCookie("${api.origin}/v1/auth/me"))
+                            worker.execute {
+                                try {
+                                    proveBrowserCookie(api, cookieHeader, identity)
+                                    runOnUiThread {
+                                        if (active()) { status(loginDiagnostics.ready(credential)); finished() }
+                                        done()
+                                    }
+                                } catch (error: Exception) { runOnUiThread {
+                                    failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY)
+                                    done()
+                                } }
+                            }
+                        } catch (error: Exception) { failure(error, ConnectionPhase.SESSION_COOKIE_VERIFY); done() }
+                    }
+                }
+            } catch (error: Exception) { runOnUiThread { failure(error, ConnectionPhase.NATIVE_DEVICE_CHECK) } }
         }
     }
     private fun revoke(credential: DeviceCredential, status: TextView, finished: () -> Unit) {
@@ -386,15 +545,20 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
     private fun isCurrentActivity() = APP_ACTIVITY_VERSION.get() == activityVersion && !isFinishing && !isDestroyed
-    private fun queueCookieMutation(current: () -> Boolean, perform: (done: () -> Unit) -> Unit) {
+    private fun queueCookieMutation(current: () -> Boolean, stalled: (Exception) -> Unit = {}, perform: (done: () -> Unit) -> Unit) {
         val operation = operation@{
             if (!current()) return@operation
+            if (cookieQueueStalled) {
+                stalled(ApiException(0, "session_cookie_queue_stalled", "Cookie 操作逾時"))
+                return@operation
+            }
             cookieInstallRunning = true
             var completed = false
             val done = {
                 if (!completed) {
                     completed = true
                     cookieInstallRunning = false
+                    cookieQueueStalled = false
                     val queued = pendingCookieInstall
                     pendingCookieInstall = null
                     queued?.invoke()
@@ -403,7 +567,8 @@ class MainActivity : Activity() {
             }
             try { perform(done) } catch (_: Exception) { done() }
         }
-        if (cookieInstallRunning) pendingCookieInstall = operation else operation()
+        if (cookieQueueStalled) operation()
+        else if (cookieInstallRunning) pendingCookieInstall = operation else operation()
     }
     private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
     @Suppress("DEPRECATION")

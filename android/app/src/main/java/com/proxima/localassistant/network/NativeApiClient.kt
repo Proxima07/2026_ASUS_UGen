@@ -30,18 +30,19 @@ class NativeApiClient(val origin: String, private val token: String? = null) {
         response.use {
             val source = response.body?.source()
             source?.request(2097153)
+            val requestId = response.header("X-Request-ID")?.takeIf { Regex("^http_[a-f0-9]{32}$").matches(it) }
             if ((source?.buffer?.size ?: 0L) > 2097152)
-                throw ApiException(response.code, "response_too_large", "API 回應超過預期上限")
+                throw ApiException(response.code, "response_too_large", "API 回應超過預期上限", requestId)
             val raw = source?.readUtf8().orEmpty()
             val parsed = try { JSONObject(raw) } catch (_: Exception) { null }
             if (!response.isSuccessful) {
                 val detail = parsed?.optJSONObject("detail") ?: parsed?.optJSONObject("error") ?: parsed
                 val receivedCode = detail?.optString("code").orEmpty()
                 val safeCode = if (Regex("^[a-zA-Z0-9_]{1,64}$").matches(receivedCode)) receivedCode else "http_${response.code}"
-                throw ApiException(response.code, safeCode, "服務拒絕請求（HTTP ${response.code}）")
+                throw ApiException(response.code, safeCode, "服務拒絕請求（HTTP ${response.code}）", requestId)
             }
-            if (raw.isBlank()) throw ApiException(response.code, "empty_response", "服務回傳空白內容")
-            if (parsed == null) throw ApiException(response.code, "invalid_json_response", "服務回應不是有效 JSON")
+            if (raw.isBlank()) throw ApiException(response.code, "empty_response", "服務回傳空白內容", requestId)
+            if (parsed == null) throw ApiException(response.code, "invalid_json_response", "服務回應不是有效 JSON", requestId)
             return Pair(parsed, response.headers.values("Set-Cookie"))
         }
     }
@@ -62,13 +63,27 @@ class NativeApiClient(val origin: String, private val token: String? = null) {
     }
     fun executeIdentity(call: Call): JSONObject = decode(call.execute()).first
     fun me() = executeIdentity(identityCall())
+    /** Cookie proof must omit Bearer: the backend intentionally gives Authorization precedence. */
+    fun browserCookieMe(cookieHeader: String): JSONObject {
+        require(SessionCookiePolicy.requestHeader(cookieHeader) == cookieHeader)
+        val request = Request.Builder().url(base.newBuilder().encodedPath("/v1/auth/me").build())
+            .header("Accept", "application/json").header("Cookie", cookieHeader)
+            .header("Cache-Control", "no-store").get().build()
+        return decode(http.newBuilder().callTimeout(15, TimeUnit.SECONDS).build().newCall(request).execute()).first
+    }
     fun getAction(actionId: String) = call("GET", "/v1/actions/${safeId(actionId)}").first
     fun confirm(actionId: String) = call("POST", "/v1/actions/${safeId(actionId)}/confirm").first
     fun cancel(actionId: String) = call("POST", "/v1/actions/${safeId(actionId)}/cancel").first
     fun result(actionId: String, token: String, state: String, result: JSONObject) = call("POST",
         "/v1/actions/${safeId(actionId)}/result", JSONObject().put("execution_token", token).put("state", state).put("result", result)).first
     fun getNote(noteId: String) = call("GET", "/v1/notes/${safeId(noteId)}").first
-    fun session() = call("POST", "/v1/auth/session")
+    fun session(): Pair<JSONObject, List<String>> {
+        require(token != null)
+        val request = Request.Builder().url(base.newBuilder().encodedPath("/v1/auth/session").build())
+            .header("Accept", "application/json").header("Authorization", "Bearer $token")
+            .post(JSONObject().toString().toRequestBody(jsonType)).build()
+        return decode(http.newBuilder().callTimeout(15, TimeUnit.SECONDS).build().newCall(request).execute())
+    }
     fun health(): JSONObject {
         val result = call("GET", "/health").first
         if (result.optString("status") != "ok" || result.optString("component") != "backend")

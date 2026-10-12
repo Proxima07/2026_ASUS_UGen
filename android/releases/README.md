@@ -1,17 +1,17 @@
 # 測試 APK
 
-`local-assistant-debug.apk` 由 android_v5 的完整來源建置，包含手機原生錄音、手機記事本交接及身分隔離防護。Android 10 以上，套件 `com.proxima.localassistant`，版本 1.4／versionCode 5；大小 4,746,762 bytes。
+`local-assistant-debug.apk` 是 android_v6 的完整安裝檔，修正已保存配對但網頁登入未通過驗證的銜接與提示。搭配 backend_v6／web_v8；本次後端不需新版本。
 
-SHA-256：`adc2e19be936e18037f1a520e2b3c171b3273b6cbffab5ba2b8866e4349e906c`
+套件 `com.proxima.localassistant`，版本 1.5／versionCode 6，Android 10 以上（minSdk 29／targetSdk 35）。大小 4,786,934 bytes。
 
-簽署憑證 SHA-256：`df9e62c3c1275a5bdad01ec9b50394e339dc2371fc1f846354bb8df8a63c3404`，與前版相同。最終離線 assembleDebug 編譯成功，APK v2 簽章驗證通過，minSdk 29／targetSdk 35、RECORD_AUDIO 權限及版本已檢查。
+SHA-256：`8331df4a560dc7cfad5f8f462ebc4aa8d729ebee53e61d75f284ad897136f146`
 
-可直接更新安裝舊 APK，不需先安裝中間版或解除安裝。解除安裝會清除 App 私有資料。本版停用舊 APK 自建加密筆記的入口與能力，保留原有檔案；不自動將其歸給目前或新配對使用者。
+簽署憑證 SHA-256：`df9e62c3c1275a5bdad01ec9b50394e339dc2371fc1f846354bb8df8a63c3404`，與前版一致。最終離線 assembleDebug 成功，APK v2 簽章、套件、版本及 SDK 已驗證。可直接更新安裝舊 APK，不需解除安裝或清除 App 資料。
 
-更新至 backend_v6／web_v7，重啟後端，再安裝本 APK 並重新開啟。既有 .env 與 cloudflared 可以沿用。首次錄音需允許 APK 麥克風權限；等待超過 15 秒時會取消，完成權限後請重新點錄音。錄音後按紅色「結束錄音並送出」，或按「取消錄音」捨棄。手機記事本交接後仍需在該 App 確認保存。
+先覆蓋 web_v8，安裝本 APK，重新開啟 App。有效的已保存配對可沿用；網頁登入失敗會保留裝置憑證，不用反覆耗用配對碼。若仍未登入，到「設定 → 檢查已配對登入」查看原生憑證／Cookie 驗證階段、HTTP 狀態、錯誤代碼與安全請求 ID。這個檢查只讀取既有狀態，不產生配對碼、不建立 session，也不改寫 Cookie 或憑證；重新建立登入請用「返回已配對助理」、上方「同步」或網頁「重新建立登入」。
 
-可下載或複製到 Android 手機後，允許該檔案來源安裝。也可使用 `adb install -r releases/local-assistant-debug.apk`。來源差異包需要依序套用前版；內附 APK 是完整安裝檔。
+Cookie 系統操作逾時時，保持安全鎖定並提示完整關閉 App 後重開；沒有自動清除配對資料或強制解鎖舊的 Cookie 操作。僅後端確認原生裝置憑證不被接受時，才提示管理者確認並重新配對。代理／網路錯誤會另外顯示。
 
-目標手機的麥克風、記事本、帳號切換、實際 Tunnel 與覆蓋安裝仍需驗收；程式及簽章檢查不能代替真機測試。正式發布應使用自己的固定 release 簽章金鑰。
+也可用 `adb install -r releases/local-assistant-debug.apk`。來源差異包須依序套用前版，內附 APK 可直接安裝。實際目標手機、公開 Tunnel 與覆蓋安裝尚未驗收；正式發布應使用自己的固定 release 簽章。
 
-配對與使用見上一層 README.md，驗證及未完善項目見 STATUS.md。
+功能、驗證範圍與未完善項目見上一層 README.md、STATUS.md，以及 docs/android_v6.md。

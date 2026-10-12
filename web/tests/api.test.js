@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Api,ApiError} from '../js/api.js?rev=web-v7';
+import {Api,ApiError} from '../js/api.js?rev=web-v8';
 
 const response=(body,status=200)=>({ok:status>=200&&status<300,status,json:async()=>body});
 test('預設瀏覽器 fetch 綁定全域物件，避免 Window 接收者檢查造成 Illegal invocation',async()=>{
@@ -24,7 +24,7 @@ test('配對憑證只換取安全 session，交換後移除原物件 token',asyn
 test('配對 session 失敗仍移除 token',async()=>{const paired={token:'secret'};const api=new Api({fetchImpl:async(path)=>response(path.endsWith('/pair')?paired:{error:{code:'failed',message:'連線失敗'}},path.endsWith('/pair')?200:503)});await assert.rejects(()=>api.pair('pair-code','browser'),/連線失敗/);assert.equal(paired.token,undefined);});
 test('重試 chat 保留傳入的 idempotency_key，不在 API helper 重建',async()=>{const bodies=[];const api=new Api({fetchImpl:async(path,options)=>{bodies.push(JSON.parse(options.body));return response({request_id:'req1'});}});await api.chat('幫我設鬧鐘','same-key');await api.chat('幫我設鬧鐘','same-key');assert.equal(bodies[0].idempotency_key,bodies[1].idempotency_key);});
 test('音訊使用 raw body 與 audio MIME，不包成 JSON 或 multipart',async()=>{let options;const api=new Api({fetchImpl:async(_,o)=>{options=o;return response({job_id:'job1'},202);}});const blob=new Blob(['audio'],{type:'audio/webm'});await api.uploadAudio(blob,'audio/webm');assert.equal(options.body,blob);assert.equal(options.headers['Content-Type'],'audio/webm');});
-test('401 清除登入狀態並保留可讀錯誤',async()=>{let revoked=false;const api=new Api({onUnauthorized:()=>{revoked=true;},fetchImpl:async()=>response({error:{code:'unauthorized',message:'請先配對'}},401)});await assert.rejects(()=>api.me(),error=>error instanceof ApiError&&error.status===401&&error.code==='unauthorized');assert.equal(revoked,true);});
+test('401 清除登入狀態並保留可讀錯誤',async()=>{let revoked=false;const api=new Api({onUnauthorized:()=>{revoked=true;},fetchImpl:async()=>response({error:{code:'unauthorized',message:'請先配對'}},401)});await assert.rejects(()=>api.notes(),error=>error instanceof ApiError&&error.status===401&&error.code==='unauthorized');assert.equal(revoked,true);});
 test('Tunnel 回傳 HTML 時顯示部署錯誤，不渲染原回應',async()=>{const api=new Api({fetchImpl:async()=>({ok:true,status:200,json:async()=>{throw new SyntaxError('<html>private error');}})});await assert.rejects(()=>api.me(),error=>error.code==='invalid_response'&&!error.message.includes('private error'));});
 test('語音 command 音訊使用專用 query，不先產生摘要筆記',async()=>{let captured;const api=new Api({fetchImpl:async(path,options)=>{captured={path,options};return response({job_id:'job1'},202);}});const blob=new Blob(['audio'],{type:'audio/webm'});await api.uploadCommandAudio(blob,'audio/webm');assert.equal(captured.path,'/v1/audio?purpose=command');assert.equal(captured.options.body,blob);});
 test('語音 chat 傳遞手機優先與原生能力；文字工具同樣預設手機記事本',async()=>{const bodies=[];const api=new Api({fetchImpl:async(_,options)=>{bodies.push(JSON.parse(options.body));return response({request_id:'req1'});}});await api.chat('記下靈感','voice-key',{noteTarget:'phone_first',nativeCapabilities:['notes.create_native']});await api.chat('記下靈感','text-key');assert.equal(bodies[0].note_target,'phone_first');assert.deepEqual(bodies[0].native_capabilities,['notes.create_native']);assert.equal(bodies[1].note_target,'phone_first');assert.deepEqual(bodies[1].native_capabilities,[]);});

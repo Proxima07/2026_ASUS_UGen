@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v7';
-import {Bridge} from '../js/bridge.js?rev=web-v7';
-import {Recorder} from '../js/recorder.js?rev=web-v7';
+import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v8';
+import {Bridge} from '../js/bridge.js?rev=web-v8';
+import {Recorder} from '../js/recorder.js?rev=web-v8';
 
 function deferred(){let resolve;let reject;const promise=new Promise((ok,no)=>{resolve=ok;reject=no;});return {promise,resolve,reject};}
 function harness(overrides={}){

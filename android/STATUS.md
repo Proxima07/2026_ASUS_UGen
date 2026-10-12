@@ -1,9 +1,13 @@
-# Android v5 功能與驗證狀態
+# Android v6 功能與驗證狀態
 
-更新：2026-10-12。搭配 backend_v6／web_v7。本文件區分已寫程式、已編譯與目標手機驗收。
+更新：2026-10-12。搭配 backend_v6／web_v8。本文件區分已寫程式、已編譯與目標手機驗收。
 
 | 項目 | 本版狀態 | 還需確認 |
 |---|---|---|
+| 原生憑證驗證 | Bearer/me auth_kind=device與saved device一致 | 已保存入口不等於後端已接受 |
+| Cookie後端證明 | CookieManager實際新值，只帶Cookie/me | auth_kind=session＋同user/device才load／ready |
+| 唯讀登入診斷 | Bearer/me與目前Cookie/me | 不兌換碼、不建session、不寫Cookie或修改憑證 |
+| 分階段失敗 | 保留憑證，安全phase／HTTP／request ID | 不能以截圖猜實機Cookie／代理根因 |
 | 原生MediaRecorder | MIC→MPEG_4/AAC .m4a，完整音檔 | 目標手機權限、編碼器與實際聲音 |
 | 原生錄音限制 | 180秒／8MiB，啟動／權限15秒 | 到上限捨棄、背景釋放、再次錄音 |
 | 原生HTTPS上傳 | 固定/v1/audio?purpose=command，Bearer不交網頁 | 實際Tunnel與STT接.m4a |
@@ -20,21 +24,31 @@
 
 ## 建置驗證紀錄
 
-最終完整assembleDebug成功，APK v2簽章有效。package為com.proxima.localassistant，versionName1.4／versionCode5，minSdk29／targetSdk35；與已交付舊版本使用相同簽署憑證。原生錄音、記事本、API與生命週期防護均已納入最終來源建置。
+最終v6完整assembleDebug成功，APK v2簽章有效並與舊版同憑證。versionName1.5／versionCode6，仍是com.proxima.localassistant、min29／target35；具備覆蓋更新條件。APK大小4,786,934 bytes，SHA-256：8331df4a560dc7cfad5f8f462ebc4aa8d729ebee53e61d75f284ad897136f146。完整交付資料見 releases/README.md。
 
-最終APK大小4,746,762 bytes，SHA-256：adc2e19be936e18037f1a520e2b3c171b3273b6cbffab5ba2b8866e4349e906c。完整交付資料見 releases/README.md。尚未執行目標手機錄音、記事本交接或覆蓋安裝測試；相同簽章與較高versionCode具備更新條件，不等於已實際覆蓋安裝。
+尚未在目標手機做登入、錄音、記事本或覆蓋安裝驗收；相同簽章與較高版本不代表已實際覆蓋安裝。
 
-## 驗收順序
+最終來源compileReleaseKotlin成功，72項純JVM自檢通過，涵蓋Cookie安全欄位、缺少／重複／舊值、階段錯誤與敏感內容處理；獨立安全審查通過。這些是本地程式驗證，不是CookieManager或手機實測。
 
-1. 更新三個子專案，APK覆蓋安裝，不清App資料。
-2. 無效碼／錯誤憑證／非信任origin不得操作；握手與/me預期身分要一致。
-3. 首次錄音權限、拒絕、15秒期限、取消與背景往返後確認麥克風釋放。
-4. 點錄音看到時鐘與紅色控制，手動結束能在後端看到audio.received／STT，接完整.m4a。
-5. 取消未上傳音訊不得建立工作；已送達後端的工作不宣稱撤回，網路逾時不自動重傳。
-6. notes.create_native確認內容，開記事本／選擇器，使用者在記事本保存，網頁只顯示handed_off。
-7. 沒有可處理App時unsupported；搜尋／更新不冒稱通用可用，不退回自建筆記。
-8. A／B配對平台筆記隔離；舊token可看該裝置原筆記，新配對不自動繼承。
-9. 原電話、鬧鐘、倒數、日曆與結果同步回歸，不重複動作。
+## 本次登入驗收
+
+1. 更新web_v8與android_v6，既有backend_v6、.env、runtime與cloudflared保留；APK覆蓋安裝，不清App資料。
+2. 已保存配對先用「檢查已配對登入」核對Bearer與Cookie；此檢查不建新session或消耗配對碼。
+3. 「返回已配對助理」通過Cookie-only後端身分證明才載頁；Web8再確認session與APK身分相同。
+4. Cookie401、缺少、未更新、錯身分與原生憑證401分階段呈現，失敗仍保留憑證；手動重試不重新兌換碼。
+5. 網頁失敗時查看安全階段／HTTP／request ID，對照後端紀錄；不要以入口或截圖推論確切Cookie根因。
+6. 同步與返回助理不重播舊指令；不同裝置身分不得誤載私人資料。
+
+## 既有功能驗收
+
+1. 非信任origin不得操作；錄音expected身分與/me一致。
+2. 首次錄音權限、拒絕、15秒期限、取消與背景往返後確認麥克風釋放。
+3. 點錄音看到時鐘與紅色控制，手動結束後端接完整.m4a並顯示audio.received／STT。
+4. 取消未上傳音訊不得建立工作；已送達工作不宣稱撤回，網路逾時不自動重傳。
+5. notes.create_native確認內容、開記事本／選擇器，使用者在記事本保存，網頁只顯示handed_off。
+6. 沒有可處理App時unsupported；搜尋／更新不冒稱通用可用，不退回自建筆記。
+7. A／B配對平台筆記隔離；舊token可看該裝置原筆記，新配對不自動繼承。
+8. 原電話、鬧鐘、倒數、日曆與結果同步回歸，不重複動作。
 
 ## 未完成界線
 

@@ -1,5 +1,5 @@
-// @web-revision: web-v7
-import {ACTION_LABELS,ACTIVE_ACTION_STATES,actionDetail,labelForStatus,element,errorMessage} from './state.js?rev=web-v7';
+// @web-revision: web-v8
+import {ACTION_LABELS,ACTIVE_ACTION_STATES,actionDetail,labelForStatus,element,errorMessage} from './state.js?rev=web-v8';
 export class Actions {
   constructor({api,bridge,container,isRequestVisible=null,onRequest=()=>{},toast=()=>{}}){this.api=api;this.bridge=bridge;this.container=container;this.isRequestVisible=isRequestVisible;this.independent=new Set();this.onRequest=onRequest;this.toast=toast;this.actions=new Map();this.requests=new Map();this.busy=new Set();this.refreshing=false;this.interval=null;this.generation=0;}
   async start(){const generation=this.generation;await this.refresh();if(generation===this.generation&&!this.interval)this.interval=setInterval(()=>{if(!document.hidden)this.refresh().catch(()=>{});},2000);}

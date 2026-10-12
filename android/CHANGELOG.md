@@ -1,5 +1,16 @@
 # Android 更新紀錄
 
+## v6 — 2026-10-12
+
+- 新增Bearer/me→session→CookieManager實際新Cookie→Cookie-only/me身分證明；後端確認auth_kind=session且user/device與原生一致才load／ready。
+- 原生HTTP各15秒；Cookie驗證完全不帶Authorization，避免有效Bearer掩蓋失效或他人Cookie。保留畫面／session／憑證epoch與Cookie寫入序列。
+- 設定明確顯示「已保存配對資料」與唯讀「檢查已配對登入」，不消耗配對碼、不POST/session、不修改憑證或Cookie。
+- 登入失敗保留原生憑證；返回助理／同步可重建Cookie，不因Cookie失效要求重新配對。
+- 安全提示區分APK裝置驗證、session、Cookie安裝與Cookie後端驗證；顯示可用HTTP及驗證過request ID，不顯示token／Cookie值／配對碼或原始服務內容。
+- versionName1.5／code6，配合web_v8與既有backend_v6，不變更共用橋接協定。最終建置與簽章見releases/README.md／STATUS.md，實機問題根因尚待新診斷確認。
+- 最終來源compileReleaseKotlin成功，72項純JVM自檢與獨立安全審查通過；目標手機Cookie傳送與恢復登入仍待驗收。
+- 最終assembleDebug成功，APK v2簽章有效且與舊版同憑證；產物4,786,934 bytes，SHA-256見releases/README.md。
+
 ## v5 — 2026-10-12
 
 - 新增MediaRecorder MIC→MPEG_4/AAC .m4a，App私有暫存完整音檔，停止後以原生HTTPS raw body上傳command音訊API；Bearer不交JavaScript。

@@ -34,8 +34,8 @@ ASSOCIATED_PATHS = {
         "contracts/examples/contacts-search.json",
         "contracts/examples/dial-result.json",
     ),
-    "web": ("docs/web_v1.md", "docs/web_v2.md", "docs/web_v3.md", "docs/web_v4.md", "docs/web_v5.md", "docs/web_v6.md", "docs/web_v7.md", "scripts/package_updates.py"),
-    "android": ("docs/android_v1.md", "docs/android_v2.md", "docs/android_v3.md", "docs/android_v4.md", "docs/android_v5.md", "scripts/package_updates.py"),
+    "web": ("docs/web_v1.md", "docs/web_v2.md", "docs/web_v3.md", "docs/web_v4.md", "docs/web_v5.md", "docs/web_v6.md", "docs/web_v7.md", "docs/web_v8.md", "scripts/package_updates.py"),
+    "android": ("docs/android_v1.md", "docs/android_v2.md", "docs/android_v3.md", "docs/android_v4.md", "docs/android_v5.md", "docs/android_v6.md", "scripts/package_updates.py"),
 }
 EXCLUDED_DIRS = {
     ".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache",

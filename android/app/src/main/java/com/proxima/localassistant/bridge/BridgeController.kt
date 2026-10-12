@@ -8,6 +8,7 @@ import androidx.webkit.WebViewFeature
 import com.proxima.localassistant.actions.ActionDispatcher
 import com.proxima.localassistant.network.ApiException
 import com.proxima.localassistant.network.NativeApiClient
+import com.proxima.localassistant.network.PairedLoginIdentity
 import com.proxima.localassistant.permissions.PermissionController
 import com.proxima.localassistant.security.ExecutionReceiptStore
 import com.proxima.localassistant.ui.NativeConfirmation
@@ -24,7 +25,7 @@ class BridgeController(
     private val worker: ExecutorService,
     permissions: PermissionController,
     private val foregroundTrusted: () -> Boolean,
-    private val session: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit,
+    private val session: (onReady: (PairedLoginIdentity) -> Unit, onError: (Exception) -> Unit) -> Unit,
     private val logout: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     private var busy = false
@@ -46,18 +47,15 @@ class BridgeController(
                 id = body.getString("message_id")
                 require(id.length in 1..128 && body.optString("protocol_version") == "1")
                 when (body.getString("type")) {
-                    "hello" -> session({
-                        worker.execute {
-                            try {
-                                val identity = api.me()
-                                send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "ready")
-                                    .put("identity", JSONObject().put("user_id", identity.getString("user_id"))
-                                        .put("device_id", identity.getString("device_id")))
-                                    .put("device_id", identity.getString("device_id"))
-                                    .put("recording", NativeRecordingController.configuration())
-                                    .put("capabilities", JSONArray(allowedKinds.toList())).put("uncertain_actions", receipts.uncertainCount()))
-                            } catch (error: Exception) { sendError(reply, id, error) }
-                        }
+                    "hello" -> session({ identity ->
+                        // Native session callback supplies identity only after Cookie-only /me
+                        // has proven the same user/device. A second Bearer /me would hide
+                        // broken browser authentication and must never stand in for that proof.
+                        send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "ready")
+                            .put("identity", JSONObject().put("user_id", identity.userId).put("device_id", identity.deviceId))
+                            .put("device_id", identity.deviceId)
+                            .put("recording", NativeRecordingController.configuration())
+                            .put("capabilities", JSONArray(allowedKinds.toList())).put("uncertain_actions", receipts.uncertainCount()))
                     }, { error -> sendError(reply, id, error) })
                     "recording_start" -> {
                         require(body.length() == 6 && body.getString("purpose") == "command")
