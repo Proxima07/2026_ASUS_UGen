@@ -25,6 +25,10 @@ import android.widget.Toast
 import com.proxima.localassistant.actions.ActionDispatcher
 import com.proxima.localassistant.bridge.BridgeController
 import com.proxima.localassistant.network.NativeApiClient
+import com.proxima.localassistant.network.ApiException
+import com.proxima.localassistant.network.ConnectionDiagnostics
+import com.proxima.localassistant.network.ConnectionFailure
+import com.proxima.localassistant.network.ConnectionPhase
 import com.proxima.localassistant.permissions.PermissionController
 import com.proxima.localassistant.security.DeviceCredential
 import com.proxima.localassistant.security.DeviceCredentialStore
@@ -45,6 +49,7 @@ class MainActivity : Activity() {
     private var bridge: BridgeController? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private val documentRequest = 4001
+    private var screenVersion = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +61,8 @@ class MainActivity : Activity() {
         }
         if (credential == null) showSetup() else openAssistant(credential)
     }
-    private fun showSetup() {
+    private fun showSetup(initialMessage: String = "") {
+        val setupVersion = ++screenVersion
         webView?.let { it.stopLoading(); it.destroy() }
         webView = null; bridge = null
         val column = LinearLayout(this).apply {
@@ -65,43 +71,73 @@ class MainActivity : Activity() {
         }
         column.addView(TextView(this).apply { text = "本地助理 · 裝置配對"; textSize = 26f; setTextColor(Color.rgb(30, 55, 45)) })
         column.addView(TextView(this).apply {
-            text = "請填入由你管理的 HTTPS 網站及一次性配對碼。手機操作由你確認，LLM 與記憶由私人設備處理。"
+            text = "請填入由你管理的 HTTPS 網站及一次性配對碼。可先檢查後端連線，再使用新碼配對；網頁與 APK 各需要自己的配對碼。"
             textSize = 16f; setPadding(0, dp(16), 0, dp(20))
         })
         val previous = try { credentials.load() } catch (_: Exception) { null }
         val origin = EditText(this).apply { hint = "https://assistant.example.com"; setText(previous?.origin.orEmpty()); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; setSingleLine(true) }
         val label = EditText(this).apply { hint = "裝置名稱"; setText("Android ${Build.MODEL}".take(100)); setSingleLine(true) }
         val code = EditText(this).apply { hint = "一次性配對碼"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; setSingleLine(true) }
-        val status = TextView(this).apply { textSize = 14f; setPadding(0, dp(16), 0, dp(16)) }
+        val status = TextView(this).apply { text = initialMessage; textSize = 14f; setPadding(0, dp(16), 0, dp(16)); setTextIsSelectable(true) }
         column.addView(origin); column.addView(label); column.addView(code); column.addView(status)
+        val health = Button(this).apply { text = "檢查後端連線" }
         val pair = Button(this).apply { text = "配對並開啟助理" }
-        column.addView(pair)
+        column.addView(health); column.addView(pair)
+        val controls = mutableListOf<View>(origin, label, code, health, pair)
+        fun active(): Boolean = !isFinishing && !isDestroyed && setupVersion == screenVersion
+        fun busy(value: Boolean) { controls.forEach { it.isEnabled = !value } }
+        fun endpoint(): String? = try { NativeApiClient.validateOrigin(origin.text.toString()) }
+            catch (_: Exception) { status.text = "請輸入 HTTPS 根網址，不能包含帳號、密碼、路徑、查詢或 fragment。"; null }
+        health.setOnClickListener {
+            val target = endpoint() ?: return@setOnClickListener
+            busy(true); status.text = "檢查 HTTPS 與 /health 中，不會傳送配對碼或裝置憑證…"
+            worker.execute {
+                try {
+                    NativeApiClient(target).health()
+                    runOnUiThread { if (active()) { busy(false); status.text = "後端連線正常：HTTPS 與 /health 已驗證，服務為 backend。可使用一組新的配對碼進行配對。" } }
+                } catch (error: Exception) {
+                    val message = ConnectionDiagnostics.describe(error, ConnectionPhase.HEALTH, target)
+                    runOnUiThread { if (active()) { busy(false); status.text = message } }
+                }
+            }
+        }
         pair.setOnClickListener {
-            val endpoint: String
-            try { endpoint = NativeApiClient.validateOrigin(origin.text.toString()) }
-            catch (_: Exception) { status.text = "請輸入 HTTPS 根網址，不能包含帳號、密碼、路徑、查詢或 fragment。"; return@setOnClickListener }
+            val target = endpoint() ?: return@setOnClickListener
             val pairingCode = code.text.toString().trim()
             val deviceLabel = label.text.toString().trim()
             if (pairingCode.length !in 8..200 || deviceLabel.length !in 1..100) { status.text = "請填寫有效配對碼與裝置名稱。"; return@setOnClickListener }
-            pair.isEnabled = false; status.text = "透過 HTTPS 配對中…"
+            busy(true); status.text = "透過 HTTPS 配對中…"
             worker.execute {
+                var phase = ConnectionPhase.PAIR_REQUEST
+                var accepted = false
                 try {
-                    val response = NativeApiClient(endpoint).call("POST", "/v1/auth/pair", JSONObject().put("code", pairingCode).put("label", deviceLabel)).first
-                    val credential = DeviceCredential(endpoint, response.getString("token"), response.getString("device_id"))
+                    val response = NativeApiClient(target).call("POST", "/v1/auth/pair", JSONObject().put("code", pairingCode).put("label", deviceLabel)).first
+                    phase = ConnectionPhase.PAIR_RESPONSE
+                    val token = response.opt("token") as? String
+                    val deviceId = response.opt("device_id") as? String
+                    if (token == null || deviceId == null || !Regex("^[A-Za-z0-9_-]{20,200}$").matches(token)
+                        || !Regex("^[A-Za-z0-9_-]{1,128}$").matches(deviceId))
+                        throw ApiException(200, "invalid_pairing_response", "配對回應格式不正確")
+                    accepted = true
+                    val credential = DeviceCredential(target, token, deviceId)
+                    phase = ConnectionPhase.PAIR_SAVE
                     credentials.save(credential)
-                    runOnUiThread { if (!isFinishing && !isDestroyed) { code.text.clear(); openAssistant(credential) } }
-                } catch (_: Exception) {
-                    runOnUiThread { if (!isFinishing && !isDestroyed) { pair.isEnabled = true; status.text = "配對未完成。請檢查 HTTPS 憑證、後端與配對碼（配對碼只能使用一次）。" } }
+                    runOnUiThread { if (active()) { busy(false); code.text.clear(); openAssistant(credential) } }
+                } catch (error: Exception) {
+                    val message = ConnectionDiagnostics.describe(error, phase, target, accepted)
+                    runOnUiThread { if (active()) { busy(false); status.text = message } }
                 }
             }
         }
         if (previous != null) {
-            column.addView(Button(this).apply { text = "返回已配對助理"; setOnClickListener { openAssistant(previous) } })
-            column.addView(Button(this).apply { text = "停用裝置並解除配對"; setOnClickListener { revoke(previous, status) } })
+            val resume = Button(this).apply { text = "返回已配對助理"; setOnClickListener { openAssistant(previous) } }
+            val revoke = Button(this).apply { text = "停用裝置並解除配對"; setOnClickListener { revoke(previous, status) } }
+            controls.add(resume); controls.add(revoke)
+            column.addView(resume); column.addView(revoke)
         }
         column.addView(Button(this).apply { text = "查看手機加密筆記（離線可用）"; setOnClickListener { LocalNotesDialog.show(this@MainActivity, LocalNotesStore(this@MainActivity), worker) } })
         column.addView(TextView(this).apply {
-            text = "首次使用：管理者依 backend README 產生配對碼。\n不需要把初始化管理金鑰填入手機。\n私密筆記與執行紀錄保存在本 APK 的加密儲存。"; textSize = 14f; setPadding(0, dp(22), 0, 0)
+            text = "首次使用：管理者依 backend README 產生配對碼。\n管理金鑰不輸入手機。檢查連線不會消耗配對碼。\n已配對但登入失敗時，使用「返回已配對助理」重試。"; textSize = 14f; setPadding(0, dp(22), 0, 0)
         })
         setContentView(ScrollView(this).apply { addView(column); applySystemInsets(this) })
     }
@@ -109,6 +145,7 @@ class MainActivity : Activity() {
         val api: NativeApiClient
         try { api = NativeApiClient(credential.origin, credential.token) }
         catch (_: Exception) { showSetup(); return }
+        ++screenVersion
         receipts = ExecutionReceiptStore(this, "${api.origin}|${credential.deviceId}")
         webView?.destroy()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(247,249,246)) }
@@ -128,7 +165,7 @@ class MainActivity : Activity() {
                         toast("已同步 ${result?.first ?: 0} 筆；未同步 ${result?.second ?: 0} 筆。狀態不確定 ${receipts.uncertainCount()} 筆。")
                     }
                 }
-            }, { toast("登入或同步失敗，請檢查網路與裝置是否已停用") })
+            }, { error -> toast(ConnectionDiagnostics.describe(error, ConnectionPhase.SESSION_REQUEST, api.origin)) })
         } }, LinearLayout.LayoutParams(0, dp(52), 1f))
         toolbar.addView(Button(this).apply { text = "手機筆記"; setOnClickListener {
             if (bridge?.isBusy() == true) toast("請先完成當前操作")
@@ -200,21 +237,25 @@ class MainActivity : Activity() {
         }
         root.addView(view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
-        refreshSession(api, { if (webView === view) view.loadUrl("${api.origin}/") }, { toast("無法建立登入，請檢查後端、憑證或重新配對"); showSetup() })
+        refreshSession(api, { if (webView === view) view.loadUrl("${api.origin}/") }, { error ->
+            if (webView === view) showSetup(ConnectionDiagnostics.describe(error, ConnectionPhase.SESSION_REQUEST, api.origin) +
+                "\n裝置憑證仍已保存；連線恢復後按「返回已配對助理」重試，無需再使用配對碼。")
+        })
     }
     private fun refreshSession(api: NativeApiClient, ready: () -> Unit, failed: (Exception) -> Unit) {
         worker.execute {
             try {
                 val cookies = api.session().second.filter { it.startsWith("local_assistant_session=") }
-                check(cookies.size == 1 && cookies[0].contains("httponly", true) && cookies[0].contains("secure", true))
+                if (cookies.size != 1 || !cookies[0].contains("httponly", true) || !cookies[0].contains("secure", true))
+                    throw ApiException(0, "session_cookie_invalid", "登入 Cookie 不符合安全要求")
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     CookieManager.getInstance().setCookie("${api.origin}/", cookies[0]) { accepted ->
                         if (accepted) { CookieManager.getInstance().flush(); ready() }
-                        else failed(IllegalStateException("Cookie rejected"))
+                        else failed(ConnectionFailure(ConnectionPhase.SESSION_COOKIE, IllegalStateException("Cookie rejected"), api.origin))
                     }
                 }
-            } catch (error: Exception) { runOnUiThread { if (!isFinishing && !isDestroyed) failed(error) } }
+            } catch (error: Exception) { runOnUiThread { if (!isFinishing && !isDestroyed) failed(ConnectionFailure(ConnectionPhase.SESSION_REQUEST, error, api.origin)) } }
         }
     }
     private fun revoke(credential: DeviceCredential, status: TextView) {
@@ -246,6 +287,7 @@ class MainActivity : Activity() {
         if (view?.canGoBack() == true) view.goBack() else super.onBackPressed()
     }
     override fun onDestroy() {
+        ++screenVersion
         fileCallback?.onReceiveValue(null); fileCallback = null
         webView?.destroy(); webView = null
         super.onDestroy()

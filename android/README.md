@@ -1,4 +1,4 @@
-# Android APK v2：本地助理手機操作橋接
+# Android APK v3：本地助理手機操作橋接
 
 本子專案使用 **Kotlin＋Android SDK＋WebView**。聊天與筆記介面由你的 Pi 網站提供；APK 負責裝置配對、授權、原生確認及手機操作，沒有內建 LLM，也不會呼叫第三方 AI。
 
@@ -53,7 +53,7 @@ cd local-assistant\android
 
 輸出位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
-版本包附已建置的測試 APK，可直接使用 `releases/local-assistant-debug.apk`，不需先在自己的電腦建置。v2 為 versionName 1.1／versionCode 2，簽署憑證與已交付 v1 相同；可作為更新安裝，避免解除安裝清除手機加密筆記。來源仍保留完整 Gradle 專案。
+版本包附已建置的測試 APK，可直接使用 `releases/local-assistant-debug.apk`，不需先在自己的電腦建置。v3 為 versionName 1.2／versionCode 3，簽署憑證與已交付 v1、v2 相同；可直接更新安裝到 v1，不需先安裝 v2。避免解除安裝清除手機加密筆記。來源仍保留完整 Gradle 專案。
 
 連接手機並啟用 USB 偵錯後，可安裝：
 
@@ -72,6 +72,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 5. APK 使用該 token 呼叫 `/v1/auth/session`，將後端回傳的 Secure／HttpOnly cookie 交給 WebView，再載入網站。
 
 網址不能包含帳密、子路徑、查詢或 fragment。`https://assistant.example.com` 可以；`http://...`、`https://.../app/` 不接受。
+
+## Chrome 可連線、APK 無法配對時
+
+v3 配對畫面新增「檢查後端連線」。只填 HTTPS 根網址即可檢查；APK 會以原生網路呼叫 `GET /health`，確認 `status=ok`、`component=backend`，不傳配對碼、不建立裝置。檢查通過後，仍需以一組新的、未使用的配對碼完成配對。
+
+- **配對碼**：有有效期限，也只能使用一次。如果同一組碼已在 Chrome 配對成功，即使還沒過期，APK 也不能重用。Chrome 與 APK 各自需要一組碼。
+- **網址含底線 `_`**：Chrome 可開啟並不保證 Android 原生 TLS/SNI 相容。部分實作會拒絕這類主機名稱；建議在既有 Cloudflare Tunnel 增加僅使用字母、數字與連字號 `-` 的子網域，指向同一後端。這是相容性排查，不能僅憑網址就確認失敗原因。
+- **新網址**：若更換子網域，將 `backend/.env` 的 `PUBLIC_BASE_URL` 改成新 HTTPS origin，重新啟動後端，在 APK 填入新網址，再產生 APK 專用的新配對碼。既有 cloudflared 仍可沿用，無需採用專案附的範例配置。
+- **HTTP 重新導向／403／HTML**：檢查 Cloudflare Access、WAF、轉址及 Tunnel 指向。APK 不共用 Chrome 的登入 cookie；本版尚未整合互動式 Access 登入。
+- **HTTPS／DNS／逾時**：修正憑證、手機時間、DNS 或服務連線；本版仍拒絕無效憑證，不提供略過 TLS 驗證的選項。
+- **憑證保存階段失敗**：伺服器已接受配對，碼已消耗；須排查手機 Android Keystore／儲存後，再使用新碼。
+- **網頁登入階段失敗**：已保存的裝置憑證會保留。從設定選擇「返回已配對助理」重試，不用反覆兌換配對碼。
+
+本版顯示固定的錯誤分類與失敗階段，不顯示原始伺服器內容、token、配對碼或原始例外文字。基本配對與連線檢查沿用 backend_v1–v3 的既有 API；完整語音及手機筆記更新仍需上述 backend_v3／web_v3。
+
+官方相容性依據：[Android SNIHostName](https://developer.android.com/reference/javax/net/ssl/SNIHostName) 的字串建構使用 `IDN.USE_STD3_ASCII_RULES`。實際手機的 TLS 供應者可能不同，需用本版診斷確認。
 
 若網站顯示登入已過期，按 APK 上方「同步」即可更新網頁登入、重送已保存的操作結果並重新整理頁面。此按鈕不會再次執行手機動作。
 
@@ -132,6 +148,7 @@ APK 只有原生配對畫面、上方「設定／同步／手機筆記」工具�
 | `app/src/main/java/com/proxima/localassistant/MainActivity.kt` | 配對、登入 cookie、WebView、錄音／檔案權限 |
 | `bridge/BridgeController.kt` | 接收操作 ID、確認、領取、防重複與回報 |
 | `network/NativeApiClient.kt` | 固定 HTTPS API 路徑，拒絕重新導向 |
+| `network/ConnectionDiagnostics.kt` | 原生連線、配對、憑證保存及網頁登入的安全錯誤分類 |
 | `security/` | 裝置 token、AES 檔案、執行收據 |
 | `web/TrustedWebViewClient.kt` | 網站來源與憑證限制 |
 | `actions/` | 通訊錄、電話、鬧鐘、日曆、筆記 |

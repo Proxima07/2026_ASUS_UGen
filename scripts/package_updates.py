@@ -32,7 +32,7 @@ ASSOCIATED_PATHS = {
         "contracts/examples/dial-result.json",
     ),
     "web": ("docs/web_v1.md", "docs/web_v2.md", "docs/web_v3.md", "scripts/package_updates.py"),
-    "android": ("docs/android_v1.md", "docs/android_v2.md", "scripts/package_updates.py"),
+    "android": ("docs/android_v1.md", "docs/android_v2.md", "docs/android_v3.md", "scripts/package_updates.py"),
 }
 EXCLUDED_DIRS = {
     ".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache",
