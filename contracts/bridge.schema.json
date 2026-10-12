@@ -76,6 +76,19 @@
         },
         "error": {
           "$ref": "#/$defs/BridgeErrorDetail"
+        },
+        "recording_id": {
+          "anyOf": [
+            {
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recording Id"
         }
       },
       "required": [
@@ -133,6 +146,28 @@
         "message_id"
       ],
       "title": "BridgeHello",
+      "type": "object"
+    },
+    "BridgeIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "user_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "User Id",
+          "type": "string"
+        },
+        "device_id": {
+          "pattern": "^dev_[0-9a-f]{32}$",
+          "title": "Device Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id",
+        "device_id"
+      ],
+      "title": "BridgeIdentity",
       "type": "object"
     },
     "BridgeLoggedOut": {
@@ -260,12 +295,503 @@
           "minimum": 0,
           "title": "Uncertain Actions",
           "type": "integer"
+        },
+        "recording": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BridgeRecordingInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BridgeIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "device_id": {
+          "anyOf": [
+            {
+              "pattern": "^dev_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Id"
         }
       },
       "required": [
         "message_id"
       ],
       "title": "BridgeReady",
+      "type": "object"
+    },
+    "BridgeRecordingCancel": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "recording_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "recording_id"
+          ]
+        },
+        {
+          "properties": {
+            "start_message_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "start_message_id"
+          ]
+        }
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_cancel",
+          "default": "recording_cancel",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "anyOf": [
+            {
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recording Id"
+        },
+        "start_message_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Message Id"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "title": "BridgeRecordingCancel",
+      "type": "object"
+    },
+    "BridgeRecordingCancelled": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_cancelled",
+          "default": "recording_cancelled",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "anyOf": [
+            {
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recording Id"
+        },
+        "reason": {
+          "enum": [
+            "user",
+            "background",
+            "navigation",
+            "limit",
+            "not_active"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "reason"
+      ],
+      "title": "BridgeRecordingCancelled",
+      "type": "object"
+    },
+    "BridgeRecordingInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "format": {
+          "const": "audio/mp4",
+          "default": "audio/mp4",
+          "title": "Format",
+          "type": "string"
+        },
+        "max_duration_ms": {
+          "const": 180000,
+          "default": 180000,
+          "title": "Max Duration Ms",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "const": 8388608,
+          "default": 8388608,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "BridgeRecordingInfo",
+      "type": "object"
+    },
+    "BridgeRecordingProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_progress",
+          "default": "recording_progress",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "elapsed_ms": {
+          "maximum": 180000,
+          "minimum": 0,
+          "title": "Elapsed Ms",
+          "type": "integer"
+        },
+        "level": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Level",
+          "type": "number"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id",
+        "elapsed_ms",
+        "level"
+      ],
+      "title": "BridgeRecordingProgress",
+      "type": "object"
+    },
+    "BridgeRecordingStart": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_start",
+          "default": "recording_start",
+          "title": "Type",
+          "type": "string"
+        },
+        "purpose": {
+          "const": "command",
+          "default": "command",
+          "title": "Purpose",
+          "type": "string"
+        },
+        "expected_user_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Expected User Id",
+          "type": "string"
+        },
+        "expected_device_id": {
+          "pattern": "^dev_[0-9a-f]{32}$",
+          "title": "Expected Device Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "expected_user_id",
+        "expected_device_id"
+      ],
+      "title": "BridgeRecordingStart",
+      "type": "object"
+    },
+    "BridgeRecordingStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_started",
+          "default": "recording_started",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "format": {
+          "const": "audio/mp4",
+          "default": "audio/mp4",
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id"
+      ],
+      "title": "BridgeRecordingStarted",
+      "type": "object"
+    },
+    "BridgeRecordingStop": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_stop",
+          "default": "recording_stop",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id"
+      ],
+      "title": "BridgeRecordingStop",
+      "type": "object"
+    },
+    "BridgeRecordingStopping": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_stopping",
+          "default": "recording_stopping",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id"
+      ],
+      "title": "BridgeRecordingStopping",
+      "type": "object"
+    },
+    "BridgeRecordingUploaded": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_uploaded",
+          "default": "recording_uploaded",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "job_id": {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^http_[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "status": {
+          "const": "queued",
+          "default": "queued",
+          "title": "Status",
+          "type": "string"
+        },
+        "purpose": {
+          "const": "command",
+          "default": "command",
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id",
+        "job_id",
+        "trace_id"
+      ],
+      "title": "BridgeRecordingUploaded",
+      "type": "object"
+    },
+    "BridgeRecordingUploading": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "recording_uploading",
+          "default": "recording_uploading",
+          "title": "Type",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "recording_id"
+      ],
+      "title": "BridgeRecordingUploading",
       "type": "object"
     }
   },
@@ -277,7 +803,16 @@
       "hello": "#/$defs/BridgeHello",
       "logged_out": "#/$defs/BridgeLoggedOut",
       "logout": "#/$defs/BridgeLogout",
-      "ready": "#/$defs/BridgeReady"
+      "ready": "#/$defs/BridgeReady",
+      "recording_cancel": "#/$defs/BridgeRecordingCancel",
+      "recording_cancelled": "#/$defs/BridgeRecordingCancelled",
+      "recording_progress": "#/$defs/BridgeRecordingProgress",
+      "recording_start": "#/$defs/BridgeRecordingStart",
+      "recording_started": "#/$defs/BridgeRecordingStarted",
+      "recording_stop": "#/$defs/BridgeRecordingStop",
+      "recording_stopping": "#/$defs/BridgeRecordingStopping",
+      "recording_uploaded": "#/$defs/BridgeRecordingUploaded",
+      "recording_uploading": "#/$defs/BridgeRecordingUploading"
     },
     "propertyName": "type"
   },
@@ -302,6 +837,33 @@
     },
     {
       "$ref": "#/$defs/BridgeError"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingStart"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingStop"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingCancel"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingStarted"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingProgress"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingStopping"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingUploading"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingUploaded"
+    },
+    {
+      "$ref": "#/$defs/BridgeRecordingCancelled"
     }
   ]
 }

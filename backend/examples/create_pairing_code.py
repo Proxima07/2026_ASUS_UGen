@@ -12,13 +12,15 @@ from app.config import Settings, validate_model_url
 def main():
     parser = argparse.ArgumentParser(description="產生手機／網頁的一次性配對碼")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--user-id", help="管理者明確指定既有使用者；未指定時每個配對碼建立獨立使用者")
     args = parser.parse_args()
     settings = Settings.from_env()
     validate_model_url(args.base_url, allow_nonlocal=True)
     try:
         with httpx.Client(trust_env=False, follow_redirects=False, timeout=15) as client:
             response = client.post(args.base_url.rstrip("/") + "/v1/auth/pairing-codes",
-                headers={"X-Bootstrap-Token": settings.admin_bootstrap_token})
+                headers={"X-Bootstrap-Token": settings.admin_bootstrap_token},
+                json={"user_id": args.user_id} if args.user_id is not None else None)
             response.raise_for_status()
             data = response.json()
         print("一次性配對碼：", data["code"])

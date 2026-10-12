@@ -19,6 +19,20 @@ def create_note(body: NoteCreate, request: Request, identity=Depends(principal))
     return request.app.state.repo.create_note(identity, **body.model_dump())
 
 
+@router.post("/native-actions")
+def create_native_note_action(body: NoteCreate, request: Request, identity=Depends(principal)):
+    """Send an approved STT draft/manual note straight to an external notes app.
+
+    No platform note is created as an intermediate or automatic backup.
+    Native confirmation and the external app's own save step still apply.
+    """
+    action = request.app.state.repo.create_action(identity, kind="notes.create_native",
+        payload={"title": body.title, "content": body.content, "transcript": body.transcript},
+        idempotency_key=body.idempotency_key,
+        ttl_seconds=request.app.state.settings.action_ttl_seconds)
+    return {"protocol_version": "1", **action}
+
+
 @router.get("/{note_id}")
 def get_note(note_id: str, request: Request, identity=Depends(principal)):
     return request.app.state.repo.get_note(identity, note_id)
@@ -39,7 +53,10 @@ def update_note(note_id: str, body: NoteUpdate, request: Request, identity=Depen
 def create_note_action(note_id: str, body: NoteActionCreate, request: Request, identity=Depends(principal)):
     repo = request.app.state.repo
     note = repo.get_note(identity, note_id)
-    action = repo.create_action(identity, kind=body.kind,
+    # Older clients may request this export name. It now means an external notes
+    # app handoff, never a write to the assistant APK's former private notebook.
+    kind = "notes.create_native" if body.kind == "notes.save_local" else body.kind
+    action = repo.create_action(identity, kind=kind,
         payload={"note_id": note["note_id"], "title": note["title"], "content": note["content"]},
         idempotency_key=body.idempotency_key, ttl_seconds=request.app.state.settings.action_ttl_seconds)
     return {"protocol_version": "1", **action}

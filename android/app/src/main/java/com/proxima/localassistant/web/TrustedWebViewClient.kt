@@ -14,7 +14,8 @@ import android.widget.Toast
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.ByteArrayInputStream
 
-class TrustedWebViewClient(private val activity: Activity, private val origin: String) : WebViewClient() {
+class TrustedWebViewClient(private val activity: Activity, private val origin: String,
+                          private val onNavigation: () -> Unit = {}) : WebViewClient() {
     fun trusted(uri: Uri): Boolean {
         val value = uri.toString().toHttpUrlOrNull() ?: return false
         val expected = origin.toHttpUrlOrNull() ?: return false
@@ -33,6 +34,10 @@ class TrustedWebViewClient(private val activity: Activity, private val origin: S
                 .setNegativeButton("取消", null).show()
         }
         return true
+    }
+    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+        onNavigation()
+        super.onPageStarted(view, url, favicon)
     }
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
         if (trusted(request.url)) return null

@@ -8,6 +8,7 @@ import androidx.webkit.WebViewFeature
 import com.proxima.localassistant.actions.ActionDispatcher
 import com.proxima.localassistant.network.ApiException
 import com.proxima.localassistant.network.NativeApiClient
+import com.proxima.localassistant.permissions.PermissionController
 import com.proxima.localassistant.security.ExecutionReceiptStore
 import com.proxima.localassistant.ui.NativeConfirmation
 import org.json.JSONArray
@@ -21,12 +22,16 @@ class BridgeController(
     private val dispatcher: ActionDispatcher,
     private val receipts: ExecutionReceiptStore,
     private val worker: ExecutorService,
+    permissions: PermissionController,
+    private val foregroundTrusted: () -> Boolean,
     private val session: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit,
     private val logout: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     private var busy = false
-    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "timer.create", "calendar.create", "notes.save_local", "notes.share", "notes.search_local", "notes.update_local")
-    fun isBusy(): Boolean = busy
+    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "timer.create", "calendar.create", "notes.create_native", "notes.share")
+    private val recording = NativeRecordingController(activity, permissions, api, worker, foregroundTrusted)
+    fun isBusy(): Boolean = busy || recording.isBusy()
+    fun cancelRecording(reason: String) = recording.cancelCurrent(reason)
     fun install() {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             "請更新 Android System WebView 後再使用"
@@ -42,19 +47,50 @@ class BridgeController(
                 require(id.length in 1..128 && body.optString("protocol_version") == "1")
                 when (body.getString("type")) {
                     "hello" -> session({
-                        send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "ready")
-                            .put("capabilities", JSONArray(allowedKinds.toList())).put("uncertain_actions", receipts.uncertainCount()))
+                        worker.execute {
+                            try {
+                                val identity = api.me()
+                                send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "ready")
+                                    .put("identity", JSONObject().put("user_id", identity.getString("user_id"))
+                                        .put("device_id", identity.getString("device_id")))
+                                    .put("device_id", identity.getString("device_id"))
+                                    .put("recording", NativeRecordingController.configuration())
+                                    .put("capabilities", JSONArray(allowedKinds.toList())).put("uncertain_actions", receipts.uncertainCount()))
+                            } catch (error: Exception) { sendError(reply, id, error) }
+                        }
                     }, { error -> sendError(reply, id, error) })
+                    "recording_start" -> {
+                        require(body.length() == 6 && body.getString("purpose") == "command")
+                        if (busy) throw ApiException(409, "native_busy", "請先完成當前手機操作，再錄音")
+                        recording.start(id, body.getString("expected_user_id"), body.getString("expected_device_id")) { value ->
+                            sendRecording(reply, id, value)
+                        }
+                    }
+                    "recording_stop" -> {
+                        require(body.length() == 4)
+                        val recordingId = body.getString("recording_id")
+                        require(Regex("^rec_[a-f0-9]{32}$").matches(recordingId))
+                        recording.stop(recordingId) { value -> sendRecording(reply, id, value) }
+                    }
+                    "recording_cancel" -> {
+                        require(body.length() in 4..5)
+                        val recordingId = if (body.has("recording_id")) body.getString("recording_id") else null
+                        val startId = if (body.has("start_message_id")) body.getString("start_message_id") else null
+                        require(recordingId == null || Regex("^rec_[a-f0-9]{32}$").matches(recordingId))
+                        require(startId == null || startId.length in 1..128)
+                        require(recordingId != null || startId != null)
+                        recording.cancel(recordingId, startId) { value -> sendRecording(reply, id, value) }
+                    }
                     "execute_action" -> {
                         require(body.length() == 4)
                         val actionId = NativeApiClient.safeId(body.getString("action_id"))
-                        if (busy) throw ApiException(409, "native_busy", "另一個操作尚未完成，請稍候")
+                        if (isBusy()) throw ApiException(409, "native_busy", "另一個操作或錄音尚未完成，請稍候")
                         if (receipts.contains(actionId)) throw ApiException(409, "action_already_attempted", "這個操作已嘗試執行；請先檢查手機與操作狀態，避免重複執行")
                         busy = true
                         loadAndConfirm(actionId, id, reply)
                     }
                     "logout" -> {
-                        if (busy) throw ApiException(409, "native_busy", "請先完成當前操作，再解除配對")
+                        if (isBusy()) throw ApiException(409, "native_busy", "請先完成或取消當前操作與錄音，再解除配對")
                         require(body.length() == 3)
                         logout({ send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "logged_out")) },
                             { error -> sendError(reply, id, error) })
@@ -74,14 +110,18 @@ class BridgeController(
                 if (action.getString("state") != "pending_confirmation")
                     throw ApiException(409, "action_not_pending", "這個操作不在待確認狀態，請重新整理")
                 val payload = JSONObject(action.getJSONObject("payload").toString())
-                if (kind in setOf("notes.save_local", "notes.share") && !payload.has("content")) {
+                if (kind in setOf("notes.create_native", "notes.share") && !payload.has("content")) {
                     val note = api.getNote(payload.getString("note_id"))
                     payload.put("title", note.getString("title")).put("content", note.getString("content"))
                     if (!note.isNull("transcript")) payload.put("transcript", note.getString("transcript"))
                 }
                 ui {
+                    if (!foregroundTrusted()) { finishError(reply, messageId,
+                        ApiException(409, "native_view_changed", "已離開這個操作所屬的助理畫面，沒有執行手機操作")); return@ui }
                     NativeConfirmation.show(activity, kind, payload) { confirmed ->
-                        if (!confirmed) cancel(actionId, messageId, reply)
+                        if (confirmed && !foregroundTrusted()) finishError(reply, messageId,
+                            ApiException(409, "native_view_changed", "操作所屬的登入或畫面已變更，沒有執行手機操作"))
+                        else if (!confirmed) cancel(actionId, messageId, reply)
                         else claimAndExecute(actionId, kind, payload, messageId, reply)
                     }
                 }
@@ -105,6 +145,8 @@ class BridgeController(
                 val token = claimed.getString("execution_token")
                 receipts.claimed(actionId, token)
                 ui {
+                    if (!foregroundTrusted()) { finishError(reply, messageId,
+                        ApiException(409, "claim_uncertain", "登入或畫面已變更，手機操作沒有執行；後端確認可能已受理，請檢查狀態，不會自動重試")); return@ui }
                     dispatcher.dispatch(kind, payload) { outcome ->
                         worker.execute {
                             try {
@@ -153,6 +195,9 @@ class BridgeController(
         send(reply, JSONObject().put("protocol_version", "1").put("message_id", id).put("type", "error")
             .put("error", JSONObject().put("code", (error as? ApiException)?.code ?: "native_error")
                 .put("message", if (error is ApiException) error.message else "手機操作無法完成，請檢查連線與權限")))
+    }
+    private fun sendRecording(reply: JavaScriptReplyProxy, id: String, body: JSONObject) {
+        send(reply, body.put("protocol_version", "1").put("message_id", id))
     }
     private fun send(reply: JavaScriptReplyProxy, body: JSONObject) { ui { try { reply.postMessage(body.toString()) } catch (_: Exception) {} } }
     private fun ui(block: () -> Unit) { activity.runOnUiThread { if (!activity.isFinishing && !activity.isDestroyed) block() } }

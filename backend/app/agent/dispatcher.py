@@ -11,7 +11,7 @@ class Dispatcher:
 
     @staticmethod
     def _phone_first(request: dict) -> bool:
-        return request.get("context", {}).get("note_target") == "phone_first"
+        return request.get("context", {}).get("note_target", "phone_first") == "phone_first"
 
     @staticmethod
     def _supports(request: dict, *kinds: str) -> bool:
@@ -120,33 +120,31 @@ class Dispatcher:
         if plan.kind != "tool":
             return self._finish(principal, request_id, {"status": "completed" if plan.kind == "reply" else "needs_clarification", "message": plan.message})
         if plan.tool == "notes.create":
-            if phone_first and self._supports(request, "notes.save_local"):
-                payload = {"note_id": "phone_note_" + request_id.removeprefix("req_"),
-                    "title": plan.args["title"], "content": plan.args["content"],
+            if phone_first:
+                if not self._supports(request, "notes.create_native"):
+                    return self._finish(principal, request_id, {"status": "unsupported",
+                        "message": "目前未連接支援手機記事本的 APK；沒有保存筆記。請在 APK 使用，或明確改用平台備忘錄。",
+                        "storage_target": "phone_app", "fallback": False})
+                payload = {"title": plan.args["title"], "content": plan.args["content"],
                     "transcript": plan.args.get("transcript")}
-                action = self._action(principal, request_id, "notes.save_local", payload, f"request:{request_id}:initial")
-                return self._await(principal, request_id, action, "請確認後保存到手機自己的加密筆記",
-                    note_operation="create", storage_target="phone")
-            return self._platform_create(principal, request_id, plan.args, fallback=phone_first)
+                action = self._action(principal, request_id, "notes.create_native", payload, f"request:{request_id}:initial")
+                return self._await(principal, request_id, action,
+                    "請確認後開啟手機記事本，並在記事本 App 內確認儲存；尚未保存筆記。",
+                    note_operation="create_native", storage_target="phone_app", fallback=False)
+            return self._platform_create(principal, request_id, plan.args)
         if plan.tool == "notes.search":
-            if phone_first and self._supports(request, "notes.search_local"):
-                action = self._action(principal, request_id, "notes.search_local",
-                    {"query": plan.args["query"], "purpose": "lookup"}, f"request:{request_id}:initial")
-                return self._await(principal, request_id, action, "請確認後查詢手機自己的加密筆記",
-                    note_operation="lookup", storage_target="phone")
-            return self._platform_lookup(principal, request_id, plan.args["query"], fallback=phone_first)
+            if phone_first:
+                return self._native_notes_unavailable(principal, request_id, "查詢")
+            return self._platform_lookup(principal, request_id, plan.args["query"], fallback=False)
         if plan.tool == "notes.update":
+            if phone_first:
+                return self._native_notes_unavailable(principal, request_id, "更新")
             self._stash_update(principal, request_id, plan.args)
-            if phone_first and self._supports(request, "notes.search_local", "notes.update_local"):
-                action = self._action(principal, request_id, "notes.search_local",
-                    {"query": plan.args["query"], "purpose": "update"}, f"request:{request_id}:initial")
-                return self._await(principal, request_id, action, "請先確認查找要修改的手機筆記",
-                    note_operation="update", storage_target="phone")
-            return self._platform_update(principal, request_id, fallback=phone_first)
+            return self._platform_update(principal, request_id, fallback=False)
         payload = dict(plan.args)
         if plan.tool == "calendar.create" and plan._defaults_notice:
             payload["defaults_notice"] = plan._defaults_notice
-        if plan.tool in {"notes.save_local", "notes.share"}:
+        if plan.tool == "notes.share":
             note = self.repo.get_note(principal, payload["note_id"])
             payload = {"note_id": note["note_id"], "title": note["title"], "content": note["content"]}
         action = self._action(principal, request_id, plan.tool, payload, f"request:{request_id}:initial")
@@ -158,13 +156,10 @@ class Dispatcher:
             message = f"請確認倒數計時 {payload['duration_seconds']} 秒「{payload['label']}」；尚未在時鐘 App 執行。"
         return self._await(principal, request_id, action, message)
 
-    @staticmethod
-    def _definitive_failure(action: dict) -> bool:
-        if action["state"] not in {"failed", "unsupported", "permission_denied"}:
-            return False
-        result = action.get("result") or {}
-        code = str(result.get("code", "")).lower()
-        return not result.get("uncertain") and not any(word in code for word in ("timeout", "uncertain", "unknown", "not_synced"))
+    def _native_notes_unavailable(self, principal, request_id: str, operation: str) -> dict:
+        return self._finish(principal, request_id, {"status": "unsupported",
+            "message": f"手機預設記事本沒有通用的 Android {operation}介面；目前未{operation}筆記，也沒有改用平台備忘錄。請在記事本 App 內處理，或明確改用平台備忘錄。",
+            "storage_target": "phone_app", "fallback": False})
 
     def after_result(self, principal, action: dict) -> dict | None:
         request_id = action.get("request_id")
@@ -176,40 +171,25 @@ class Dispatcher:
         state = action["state"]
         changes = {"last_result_action_id": action["action_id"], "last_result": action.get("result"), "status": state}
         kind = action["kind"]
-        if kind == "notes.save_local" and request.get("note_operation") == "create":
-            if state == "completed":
-                return self._finish(principal, request_id, {**changes, "message": "備忘錄已保存到手機自己的加密筆記",
-                    "storage_target": "phone", "note_id": action["payload"]["note_id"], "fallback": False})
-            if self._definitive_failure(action):
-                return self._platform_create(principal, request_id, action["payload"], fallback=True, changes=changes)
-        if kind == "notes.search_local":
-            purpose = action["payload"].get("purpose", "lookup")
-            if state == "completed":
-                notes = action.get("result", {}).get("notes", [])
-                if not notes:
-                    if purpose == "update":
-                        return self._platform_update(principal, request_id, fallback=True, changes=changes)
-                    return self._platform_lookup(principal, request_id, action["payload"]["query"], fallback=True, changes=changes)
-                if purpose == "lookup":
-                    return self._finish(principal, request_id, {**changes, "message": f"在手機找到 {len(notes)} 筆筆記",
-                        "notes": notes, "storage_target": "phone", "fallback": False})
-                if len(notes) > 1:
-                    candidates = [{**note, "candidate_id": f"{action['action_id']}:{i}"} for i, note in enumerate(notes)]
-                    return self._finish(principal, request_id, {**changes, "status": "needs_note_selection",
-                        "message": "手機找到多筆筆記，請選擇要修改的對象", "note_candidates": candidates,
-                        "note_selection_target": "phone", "storage_target": "phone"})
-                next_action = self._note_update_action(principal, request_id, notes[0], action["action_id"])
-                return self._await(principal, request_id, next_action, "請確認要修改的手機筆記與新內容", **changes)
-            if self._definitive_failure(action):
-                if purpose == "update":
-                    return self._platform_update(principal, request_id, fallback=True, changes=changes)
-                return self._platform_lookup(principal, request_id, action["payload"]["query"], fallback=True, changes=changes)
-        if kind == "notes.update_local":
-            if state == "completed":
-                return self._finish(principal, request_id, {**changes, "message": "手機自己的加密筆記已更新",
-                    "storage_target": "phone", "note_id": action["payload"]["note_id"], "fallback": False})
-            if self._definitive_failure(action):
-                return self._platform_update(principal, request_id, fallback=True, changes=changes)
+        if kind == "notes.create_native":
+            messages = {
+                "opened": "已開啟手機記事本介面；請在該 App 內確認儲存，尚未驗證筆記已保存。",
+                "handed_off": "已把筆記內容交給手機 App；請選擇記事本並確認儲存，尚未驗證筆記已保存。",
+                "cancelled": "已取消開啟手機記事本；沒有改存平台備忘錄。",
+                "unsupported": "手機沒有支援的記事本接收介面；沒有改存平台備忘錄。",
+                "permission_denied": "未取得開啟手機記事本所需權限；沒有改存平台備忘錄。",
+                "failed": "開啟手機記事本未完成；没有改存平台備忘錄。",
+            }
+            return self._finish(principal, request_id, {**changes,
+                "message": messages.get(state, "手機記事本操作狀態已更新；尚未驗證筆記已保存。"),
+                "storage_target": "phone_app", "fallback": False})
+        if kind in {"notes.save_local", "notes.search_local", "notes.update_local"}:
+            # Old APK-private notes are not the user's default notes application.
+            # In particular, an unsupported old operation must never copy content
+            # into platform notes as an automatic fallback.
+            return self._finish(principal, request_id, {**changes,
+                "message": "舊版 APK 私有筆記功能已停用；請重新建立指令使用手機記事本。沒有改存平台備忘錄。",
+                "fallback": False})
         if kind == "contacts.search" and state == "completed":
             contacts = (action.get("result") or {}).get("contacts", [])
             candidates = [{**c, "candidate_id": f"{action['action_id']}:{i}"} for i, c in enumerate(contacts)]
@@ -232,15 +212,6 @@ class Dispatcher:
         return self._action(principal, request_id, "phone.dial",
             {"name": candidate.get("name", ""), "phone_number": candidate["phone_number"]}, f"contact-dial:{parent_id}")
 
-    def _note_update_action(self, principal, request_id: str, candidate: dict, parent_id: str) -> dict:
-        specification = self.repo.get_request(principal, request_id)["pending_note_update"]
-        payload = {"note_id": candidate["note_id"], "content": specification["content"],
-                   "mode": specification.get("mode", "replace"),
-                   "current_title": candidate["title"], "current_preview": candidate.get("preview") or ""}
-        if specification.get("title") is not None:
-            payload["title"] = specification["title"]
-        return self._action(principal, request_id, "notes.update_local", payload, f"note-update:{parent_id}")
-
     def select_contact(self, principal, request_id: str, candidate_id: str) -> dict:
         request = self.repo.get_request(principal, request_id)
         if request.get("status") != "needs_selection":
@@ -261,5 +232,4 @@ class Dispatcher:
         if request.get("note_selection_target") == "platform":
             return self._platform_update_selected(principal, request_id, candidates[0]["note_id"],
                 fallback=request.get("fallback", False))
-        action = self._note_update_action(principal, request_id, candidates[0], request["last_result_action_id"])
-        return self._await(principal, request_id, action, "請確認選定的手機筆記與新內容")
+        return self._native_notes_unavailable(principal, request_id, "更新")

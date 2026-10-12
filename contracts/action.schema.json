@@ -29,6 +29,7 @@
         "alarm.create",
         "timer.create",
         "calendar.create",
+        "notes.create_native",
         "notes.save_local",
         "notes.share",
         "notes.search_local",
@@ -347,22 +348,6 @@
         "content"
       ],
       "title": "NoteUpdateArgs",
-      "type": "object"
-    },
-    "notes.save_local": {
-      "additionalProperties": false,
-      "properties": {
-        "note_id": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Note Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "note_id"
-      ],
-      "title": "NoteReferenceArgs",
       "type": "object"
     },
     "notes.share": {

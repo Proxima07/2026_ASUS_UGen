@@ -54,7 +54,7 @@ class APIIntegrationTests(unittest.TestCase):
         return paired.json()["token"]
 
     def chat(self, text, key="request-1"):
-        response = self.client.post("/v1/chat", headers=self.headers, json={"text": text, "idempotency_key": key})
+        response = self.client.post("/v1/chat", headers=self.headers, json={"text": text, "idempotency_key": key, "note_target": "platform"})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 

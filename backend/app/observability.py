@@ -14,7 +14,7 @@ _FIELDS = {
     "trace_id", "http_request_id", "request_id", "job_id", "method", "route",
     "status_code", "duration_ms", "bytes", "content_type", "purpose", "chars",
     "kind", "plan_kind", "state", "code", "version", "component", "port", "command_text",
-    "conversation_id", "history_messages", "history_chars",
+    "conversation_id", "history_messages", "history_chars", "records",
 }
 _IDS = {"trace_id": r"http_[0-9a-f]{32}", "http_request_id": r"http_[0-9a-f]{32}",
         "request_id": r"req_[0-9a-f]{32}", "job_id": r"job_[0-9a-f]{32}"}
@@ -48,7 +48,7 @@ def http_route(path: str) -> str:
     """Classify paths without logging untrusted path/query/filename content."""
     exact = {"/": "static", "/health": "/health", "/docs": "/docs", "/openapi.json": "/openapi.json",
              "/v1/chat": "/v1/chat", "/v1/audio": "/v1/audio", "/v1/notes": "/v1/notes",
-             "/v1/actions": "/v1/actions"}
+             "/v1/actions": "/v1/actions", "/v1/notes/native-actions": "/v1/notes/native-actions"}
     if path in exact:
         return exact[path]
     if path.startswith("/js/") or path.startswith("/css/") or path.startswith("/assets/"):

@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import com.proxima.localassistant.permissions.PermissionController
-import com.proxima.localassistant.storage.LocalNotesStore
 import org.json.JSONObject
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -13,7 +12,6 @@ import java.util.concurrent.Executors
 class ActionDispatcher(
     private val activity: Activity,
     private val permissions: PermissionController,
-    private val notes: LocalNotesStore,
     private val worker: Executor = DEFAULT_WORKER
 ) {
     fun dispatch(kind: String, payload: JSONObject, callback: (JSONObject) -> Unit) {
@@ -33,8 +31,7 @@ class ActionDispatcher(
                 "alarm.create" -> AlarmHandler(activity).execute(payload, reply)
                 "timer.create" -> TimerHandler(activity).execute(payload, reply)
                 "calendar.create" -> CalendarHandler(activity, permissions, worker).execute(payload, reply)
-                "notes.save_local", "notes.share", "notes.search_local", "notes.update_local" ->
-                    NotesHandler(activity, notes, worker).execute(kind, payload, reply)
+                "notes.create_native", "notes.share" -> NotesHandler(activity).execute(kind, payload, reply)
                 else -> reply(receipt("unsupported", "手機不支援這項操作"))
             }
         } catch (_: SecurityException) {

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v6';
-import {Bridge} from '../js/bridge.js?rev=web-v6';
-import {Recorder} from '../js/recorder.js?rev=web-v6';
+import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v7';
+import {Bridge} from '../js/bridge.js?rev=web-v7';
+import {Recorder} from '../js/recorder.js?rev=web-v7';
 
 function deferred(){let resolve;let reject;const promise=new Promise((ok,no)=>{resolve=ok;reject=no;});return {promise,resolve,reject};}
 function harness(overrides={}){
@@ -15,7 +15,7 @@ function harness(overrides={}){
     getRequest:async()=>({request_id:'req_current',status:'completed',message:'已完成'}),
     ...overrides.api
   };
-  const bridge={ready:true,capabilities:new Set(['alarm.create','phone.dial','contacts.search','notes.save_local']),supports:()=>true,execute:(id,kind)=>{const message_id=`message_${executions.length+1}`;executions.push({id,kind,message_id});return message_id;},...overrides.bridge};
+  const bridge={ready:true,capabilities:new Set(['alarm.create','phone.dial','contacts.search','notes.create_native']),supports:()=>true,execute:(id,kind)=>{const message_id=`message_${executions.length+1}`;executions.push({id,kind,message_id});return message_id;},...overrides.bridge};
   const flow=new VoiceFlow({api,bridge,isAuthorized:()=>authorized,isForeground:()=>foreground,onRecord:record=>records.push(record),makeId:prefix=>`${prefix}_${++sequence}`,setTimer:(fn)=>{const id=++sequence;timers.set(id,fn);return id;},clearTimer:id=>timers.delete(id)});
   return {flow,api,bridge,executions,chats,records,timers,setForeground:value=>{foreground=value;},setAuthorized:value=>{authorized=value;}};
 }
@@ -34,7 +34,7 @@ test('本地 STT 完成後只送一次 LLM，且帶手機優先與實際橋接�
   const h=harness();const run=h.flow.begin();
   await Promise.all([h.flow.submitTranscript(run,'幫我寫筆記'),h.flow.submitTranscript(run,'幫我寫筆記')]);
   assert.equal(h.chats.length,1);assert.equal(h.chats[0][2].noteTarget,'phone_first');
-  assert.deepEqual(h.chats[0][2].nativeCapabilities,['alarm.create','phone.dial','contacts.search','notes.save_local']);
+  assert.deepEqual(h.chats[0][2].nativeCapabilities,['alarm.create','phone.dial','contacts.search','notes.create_native']);
 });
 test('背景停止後晚到的 STT 即使回到前景也不送 LLM',async()=>{
   const audio=deferred();const h=harness({api:{audioJob:()=>audio.promise}});
@@ -122,7 +122,7 @@ test('Bridge 拒絕未知訊息、錯配 action 與重複回覆，不污染已�
   const oldNative=globalThis.NativeBridge;const sent=[],results=[],errors=[];
   globalThis.NativeBridge={postMessage:raw=>sent.push(JSON.parse(raw))};
   try{
-    const bridge=new Bridge({onResult:result=>results.push(result),onError:(message,value)=>errors.push({message,value})});bridge.nativePresent=true;bridge.ready=true;bridge.capabilities=new Set(['alarm.create']);
+    const bridge=new Bridge({onResult:result=>results.push(result),onError:(message,value)=>errors.push({message,value})});bridge.nativePresent=true;bridge.ready=true;bridge.capabilities=new Set(['alarm.create']);bridge.identity={user_id:'user1',device_id:'device1'};bridge.bindSession(bridge.identity);
     const id=bridge.execute('act_current','alarm.create');
     bridge.receive({protocol_version:'1',type:'action_result',message_id:'unknown',action_id:'act_current',state:'completed'});
     bridge.receive({protocol_version:'1',type:'action_result',message_id:id,action_id:'act_wrong',state:'completed'});

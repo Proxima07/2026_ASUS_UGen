@@ -118,16 +118,21 @@ class Repository:
             connection.execute("UPDATE devices SET active=0 WHERE device_id=?", (target,))
             connection.execute("DELETE FROM sessions WHERE device_id=?", (target,))
 
-    def create_pairing_code(self, ttl_seconds: int = 300) -> dict:
+    def create_pairing_code(self, ttl_seconds: int = 300, *, user_id: str | None = None) -> dict:
         expires = time.time() + _ttl(ttl_seconds, maximum=3600)
         code = secrets.token_urlsafe(18)
+        # The trusted server assigns the owner before issuing the credential.
+        # Labels and the unauthenticated pairing body never choose an account.
+        if user_id is not None and (not isinstance(user_id, str) or not 1 <= len(user_id) <= 200):
+            raise RepositoryError("invalid_user_id", "A user id must contain 1–200 characters.")
+        user_id = user_id if user_id is not None else _identifier("usr")
         with self.database.connect(write=True) as connection:
             connection.execute("DELETE FROM pairing_codes WHERE expires_at<?", (time.time(),))
-            connection.execute("INSERT INTO pairing_codes(code_hash,expires_at,created_at) VALUES(?,?,?)",
-                               (hash_token(code), expires, time.time()))
+            connection.execute("INSERT INTO pairing_codes(code_hash,expires_at,created_at,user_id) VALUES(?,?,?,?)",
+                               (hash_token(code), expires, time.time(), user_id))
         return {"code": code, "expires_at": expires}
 
-    def consume_pairing_code(self, code: str, label: str, user_id: str) -> dict:
+    def consume_pairing_code(self, code: str, label: str) -> dict:
         if not code or len(code) > 200:
             raise RepositoryError("invalid_pairing_code", "The pairing code is invalid or expired.", 401)
         with self.database.connect(write=True) as connection:
@@ -138,6 +143,8 @@ class Repository:
             ).rowcount
             if not updated:
                 raise RepositoryError("invalid_pairing_code", "The pairing code is invalid or expired.", 401)
+            user_id = connection.execute("SELECT user_id FROM pairing_codes WHERE code_hash=?",
+                (hash_token(code),)).fetchone()["user_id"]
             return self._create_device(connection, user_id, label)
 
     def create_session(self, principal: Principal, ttl_seconds: int = 86400) -> dict:
@@ -323,37 +330,37 @@ class Repository:
                 "INSERT INTO notes(note_id,user_id,device_id,payload_enc,idem_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                 (record_id, principal.user_id, principal.device_id, self._encrypt(principal, "note", record_id, payload), idem, now, now),
             )
-            return self._note_view(self._find(connection, "notes", "note_id", record_id, principal, device_only=False))
+            return self._note_view(self._find(connection, "notes", "note_id", record_id, principal))
 
     def list_notes(self, principal: Principal, limit: int = 100, offset: int = 0) -> list[dict]:
         if not 1 <= limit <= 200 or offset < 0:
             raise RepositoryError("invalid_pagination", "Invalid pagination parameters.")
         with self.database.connect() as connection:
             self._assert_active(connection, principal)
-            rows = connection.execute("SELECT * FROM notes WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                                      (principal.user_id, limit, offset)).fetchall()
+            rows = connection.execute("SELECT * FROM notes WHERE user_id=? AND device_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                                      (principal.user_id, principal.device_id, limit, offset)).fetchall()
             return [self._note_view(row) for row in rows]
 
     def get_note(self, principal: Principal, note_id: str) -> dict:
         with self.database.connect() as connection:
             self._assert_active(connection, principal)
-            return self._note_view(self._find(connection, "notes", "note_id", note_id, principal, device_only=False))
+            return self._note_view(self._find(connection, "notes", "note_id", note_id, principal))
 
     def update_note(self, principal: Principal, note_id: str, title: str, content: str,
                     transcript: str | None = None) -> dict:
         payload = {"title": title, "content": content, "transcript": transcript}
         with self.database.connect(write=True) as connection:
             self._assert_active(connection, principal)
-            self._find(connection, "notes", "note_id", note_id, principal, device_only=False)
-            connection.execute("UPDATE notes SET payload_enc=?,updated_at=? WHERE note_id=? AND user_id=?",
-                               (self._encrypt(principal, "note", note_id, payload), time.time(), note_id, principal.user_id))
-            return self._note_view(self._find(connection, "notes", "note_id", note_id, principal, device_only=False))
+            self._find(connection, "notes", "note_id", note_id, principal)
+            connection.execute("UPDATE notes SET payload_enc=?,updated_at=? WHERE note_id=? AND user_id=? AND device_id=?",
+                               (self._encrypt(principal, "note", note_id, payload), time.time(), note_id, principal.user_id, principal.device_id))
+            return self._note_view(self._find(connection, "notes", "note_id", note_id, principal))
 
     def delete_note(self, principal: Principal, note_id: str) -> None:
         with self.database.connect(write=True) as connection:
             self._assert_active(connection, principal)
-            self._find(connection, "notes", "note_id", note_id, principal, device_only=False)
-            connection.execute("DELETE FROM notes WHERE note_id=? AND user_id=?", (note_id, principal.user_id))
+            self._find(connection, "notes", "note_id", note_id, principal)
+            connection.execute("DELETE FROM notes WHERE note_id=? AND user_id=? AND device_id=?", (note_id, principal.user_id, principal.device_id))
 
     def _action_view(self, row: sqlite3.Row) -> dict:
         state, now = row["state"], time.time()
@@ -443,6 +450,7 @@ class Repository:
             normalized_kind = row["kind"].lower().replace(".", "_")
             # Launching another app does not prove a call connected or an alarm was saved.
             if state == "completed" and (normalized_kind in {"dial", "call", "phone_call", "open_dialer", "set_alarm", "alarm", "notes_share"}
+                                         or normalized_kind == "notes_create_native"
                                          or "dial" in normalized_kind or "alarm" in normalized_kind or "timer" in normalized_kind):
                 raise RepositoryError("unverifiable_result", "This action can report opened or handed_off, not verified completion.")
             now = time.time()
@@ -517,3 +525,81 @@ class Repository:
                                    (self._encrypt(principal, "job", row["job_id"], payload), time.time(), row["job_id"]))
                 recovered += 1
         return recovered
+
+    def quarantine_legacy_note_snapshots(self) -> int:
+        """Retire copied foreign note snapshots before authenticated API startup.
+
+        The earlier shared user id could copy a different device's platform note
+        into a request/action even after live note queries are fixed. Never
+        rewrite note ownership, device credentials, or AES-GCM user AAD.
+        """
+        changed = 0
+        legacy_kinds = {"notes.save_local", "notes.search_local", "notes.update_local"}
+        with self.database.connect(write=True) as connection:
+            owners = {row["note_id"]: (row["user_id"], row["device_id"])
+                for row in connection.execute("SELECT note_id,user_id,device_id FROM notes").fetchall()}
+
+            def foreign_reference(value, owner):
+                if isinstance(value, dict):
+                    note_id = value.get("note_id")
+                    # note_* identifies platform notes; phone metadata ids are
+                    # not mistaken for records in this database. Missing deleted
+                    # platform records have no provable owner, so fail closed.
+                    if isinstance(note_id, str) and note_id.startswith("note_") and owners.get(note_id) != owner:
+                        return True
+                    return any(foreign_reference(item, owner) for key, item in value.items()
+                        if key != "_original_input")
+                if isinstance(value, list):
+                    return any(foreign_reference(item, owner) for item in value)
+                return False
+
+            unsafe_actions = set()
+            retired_private_actions = set()
+            now = time.time()
+            for row in connection.execute("SELECT * FROM actions").fetchall():
+                owner = (row["user_id"], row["device_id"])
+                payload = self._decrypt(row, "action", row["action_id"])
+                result = self._decrypt(row, "action_result", row["action_id"], field="result_enc") if row["result_enc"] else {}
+                unsafe = foreign_reference(payload, owner) or foreign_reference(result, owner)
+                retired = row["kind"] in legacy_kinds and row["state"] in {"pending_confirmation", "claimed"}
+                if not unsafe and not retired:
+                    continue
+                principal = Principal(*owner)
+                if unsafe:
+                    unsafe_actions.add(row["action_id"])
+                    payload = {}
+                    result = {"code": "legacy_note_snapshot_quarantined"}
+                else:
+                    retired_private_actions.add(row["action_id"])
+                    result = {"code": "legacy_private_notes_disabled"}
+                connection.execute("UPDATE actions SET payload_enc=?,state='unsupported',execution_hash=NULL,"
+                    "lease_expires_at=NULL,result_enc=?,result_at=?,updated_at=? WHERE action_id=?",
+                    (self._encrypt(principal, "action", row["action_id"], payload),
+                     self._encrypt(principal, "action_result", row["action_id"], result), now, now, row["action_id"]))
+                changed += 1
+
+            for row in connection.execute("SELECT * FROM requests").fetchall():
+                owner = (row["user_id"], row["device_id"])
+                payload = self._decrypt(row, "request", row["request_id"])
+                unsafe = foreign_reference(payload, owner) or payload.get("action_id") in unsafe_actions
+                retired = payload.get("action_id") in retired_private_actions
+                if not unsafe and not retired:
+                    continue
+                principal = Principal(*owner)
+                if unsafe:
+                    original = payload.get("_original_input")
+                    conversation_id = payload.get("conversation_id")
+                    payload = {"_original_input": original, "text": "[舊版跨裝置筆記紀錄已隔離]",
+                        "context": {}, "status": "failed", "action_id": None,
+                        "message": "舊版紀錄包含無法確認為此裝置所有的筆記內容，已隔離；請建立新指令。",
+                        "error": {"code": "legacy_note_snapshot_quarantined", "message": "舊版筆記快照已隔離"}}
+                    if conversation_id:
+                        payload["conversation_id"] = conversation_id
+                else:
+                    payload.update(status="unsupported",
+                        message="舊版 APK 私有筆記操作已停用；請重新建立指令使用手機記事本。",
+                        fallback=False)
+                connection.execute("UPDATE requests SET payload_enc=?,updated_at=? WHERE request_id=?",
+                    (self._encrypt(principal, "request", row["request_id"], payload), now, row["request_id"]))
+                changed += 1
+        return changed

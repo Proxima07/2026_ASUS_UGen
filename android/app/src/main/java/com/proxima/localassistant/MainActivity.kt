@@ -33,14 +33,20 @@ import com.proxima.localassistant.permissions.PermissionController
 import com.proxima.localassistant.security.DeviceCredential
 import com.proxima.localassistant.security.DeviceCredentialStore
 import com.proxima.localassistant.security.ExecutionReceiptStore
-import com.proxima.localassistant.storage.LocalNotesStore
-import com.proxima.localassistant.ui.LocalNotesDialog
+import com.proxima.localassistant.ui.NativeConfirmation
 import com.proxima.localassistant.web.TrustedWebViewClient
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : Activity() {
-    companion object { private val APP_WORKER = Executors.newSingleThreadExecutor() }
+    companion object {
+        private val APP_WORKER = Executors.newSingleThreadExecutor()
+        private val APP_ACTIVITY_VERSION = AtomicLong()
+        // CookieManager is process-global, so its asynchronous mutation queue must be too.
+        private var cookieInstallRunning = false
+        private var pendingCookieInstall: (() -> Unit)? = null
+    }
     private val worker = APP_WORKER
     private lateinit var credentials: DeviceCredentialStore
     private lateinit var permissions: PermissionController
@@ -50,9 +56,14 @@ class MainActivity : Activity() {
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private val documentRequest = 4001
     private var screenVersion = 0
+    private var sessionVersion = 0
+    private var currentCredential: DeviceCredential? = null
+    private var foreground = false
+    private var activityVersion = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activityVersion = APP_ACTIVITY_VERSION.incrementAndGet()
         credentials = DeviceCredentialStore(this)
         permissions = PermissionController(this)
         val credential = try { credentials.load() } catch (_: Exception) {
@@ -63,6 +74,10 @@ class MainActivity : Activity() {
     }
     private fun showSetup(initialMessage: String = "") {
         val setupVersion = ++screenVersion
+        ++sessionVersion
+        currentCredential = null
+        NativeConfirmation.cancelForActivity(this)
+        bridge?.cancelRecording("navigation")
         webView?.let { it.stopLoading(); it.destroy() }
         webView = null; bridge = null
         val column = LinearLayout(this).apply {
@@ -84,7 +99,7 @@ class MainActivity : Activity() {
         val pair = Button(this).apply { text = "配對並開啟助理" }
         column.addView(health); column.addView(pair)
         val controls = mutableListOf<View>(origin, label, code, health, pair)
-        fun active(): Boolean = !isFinishing && !isDestroyed && setupVersion == screenVersion
+        fun active(): Boolean = isCurrentActivity() && setupVersion == screenVersion
         fun busy(value: Boolean) { controls.forEach { it.isEnabled = !value } }
         fun endpoint(): String? = try { NativeApiClient.validateOrigin(origin.text.toString()) }
             catch (_: Exception) { status.text = "請輸入 HTTPS 根網址，不能包含帳號、密碼、路徑、查詢或 fragment。"; null }
@@ -121,8 +136,17 @@ class MainActivity : Activity() {
                     accepted = true
                     val credential = DeviceCredential(target, token, deviceId)
                     phase = ConnectionPhase.PAIR_SAVE
-                    credentials.save(credential)
-                    runOnUiThread { if (active()) { busy(false); code.text.clear(); openAssistant(credential) } }
+                    runOnUiThread {
+                        if (!active()) return@runOnUiThread
+                        try {
+                            // Commit only on the still-current setup screen. A late response from
+                            // an old Activity must never replace another account's local credential.
+                            credentials.save(credential)
+                            busy(false); code.text.clear(); openAssistant(credential)
+                        } catch (error: Exception) {
+                            busy(false); status.text = ConnectionDiagnostics.describe(error, ConnectionPhase.PAIR_SAVE, target, true)
+                        }
+                    }
                 } catch (error: Exception) {
                     val message = ConnectionDiagnostics.describe(error, phase, target, accepted)
                     runOnUiThread { if (active()) { busy(false); status.text = message } }
@@ -131,11 +155,12 @@ class MainActivity : Activity() {
         }
         if (previous != null) {
             val resume = Button(this).apply { text = "返回已配對助理"; setOnClickListener { openAssistant(previous) } }
-            val revoke = Button(this).apply { text = "停用裝置並解除配對"; setOnClickListener { revoke(previous, status) } }
+            val revoke = Button(this).apply { text = "停用裝置並解除配對"; setOnClickListener {
+                busy(true); revoke(previous, status) { if (active()) busy(false) }
+            } }
             controls.add(resume); controls.add(revoke)
             column.addView(resume); column.addView(revoke)
         }
-        column.addView(Button(this).apply { text = "查看手機加密筆記（離線可用）"; setOnClickListener { LocalNotesDialog.show(this@MainActivity, LocalNotesStore(this@MainActivity), worker) } })
         column.addView(TextView(this).apply {
             text = "首次使用：管理者依 backend README 產生配對碼。\n管理金鑰不輸入手機。檢查連線不會消耗配對碼。\n已配對但登入失敗時，使用「返回已配對助理」重試。"; textSize = 14f; setPadding(0, dp(22), 0, 0)
         })
@@ -146,6 +171,10 @@ class MainActivity : Activity() {
         try { api = NativeApiClient(credential.origin, credential.token) }
         catch (_: Exception) { showSetup(); return }
         ++screenVersion
+        ++sessionVersion
+        bridge?.cancelRecording("navigation")
+        currentCredential = credential
+        NativeConfirmation.cancelForActivity(this)
         receipts = ExecutionReceiptStore(this, "${api.origin}|${credential.deviceId}")
         webView?.destroy()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(247,249,246)) }
@@ -167,10 +196,6 @@ class MainActivity : Activity() {
                 }
             }, { error -> toast(ConnectionDiagnostics.describe(error, ConnectionPhase.SESSION_REQUEST, api.origin)) })
         } }, LinearLayout.LayoutParams(0, dp(52), 1f))
-        toolbar.addView(Button(this).apply { text = "手機筆記"; setOnClickListener {
-            if (bridge?.isBusy() == true) toast("請先完成當前操作")
-            else LocalNotesDialog.show(this@MainActivity, LocalNotesStore(this@MainActivity), worker)
-        } }, LinearLayout.LayoutParams(0, dp(52), 1f))
         root.addView(toolbar)
         val view = WebView(this)
         webView = view
@@ -189,7 +214,7 @@ class MainActivity : Activity() {
         }
         WebView.setWebContentsDebuggingEnabled(false)
         CookieManager.getInstance().apply { setAcceptCookie(true); setAcceptThirdPartyCookies(view, false) }
-        val trusted = TrustedWebViewClient(this, api.origin)
+        val trusted = TrustedWebViewClient(this, api.origin) { bridge?.cancelRecording("navigation") }
         view.webViewClient = trusted
         view.webChromeClient = object : WebChromeClient() {
             private val pendingAudio = mutableSetOf<PermissionRequest>()
@@ -216,18 +241,31 @@ class MainActivity : Activity() {
                 catch (_: Exception) { fileCallback?.onReceiveValue(null); fileCallback = null; toast("沒有可選擇音訊的檔案 App"); true }
             }
         }
-        val dispatcher = ActionDispatcher(this, permissions, LocalNotesStore(this), worker)
-        val controller = BridgeController(this, view, api, dispatcher, receipts, worker,
+        val dispatcher = ActionDispatcher(this, permissions, worker)
+        val controller = BridgeController(this, view, api, dispatcher, receipts, worker, permissions,
+            { foreground && currentCredential === credential && webView === view &&
+                trusted.trusted(Uri.parse(view.url ?: "")) && isCurrentActivity() },
             { ready, failed -> refreshSession(api, ready, failed) },
             { ready, failed -> worker.execute {
                 try {
                     api.call("POST", "/v1/auth/revoke-device")
-                    credentials.clear()
                     runOnUiThread {
-                        ready()
-                        CookieManager.getInstance().removeAllCookies { CookieManager.getInstance().flush(); showSetup() }
+                        if (!isCurrentActivity() || currentCredential !== credential || webView !== view) return@runOnUiThread
+                        val cleared = runCatching { if (credentials.load() == credential) credentials.clear() }.isSuccess
+                        ++sessionVersion
+                        if (cleared) ready() else failed(ApiException(0, "credential_clear_failed", "後端已停用裝置，但手機憑證未能移除。請重新配對。"))
+                        queueCookieMutation({ isCurrentActivity() && currentCredential === credential && webView === view }) { done ->
+                            CookieManager.getInstance().removeAllCookies {
+                                if (isCurrentActivity() && currentCredential === credential && webView === view) {
+                                    CookieManager.getInstance().flush(); showSetup()
+                                }
+                                done()
+                            }
+                        }
                     }
-                } catch (error: Exception) { runOnUiThread { failed(error) } }
+                } catch (error: Exception) { runOnUiThread {
+                    if (isCurrentActivity() && currentCredential === credential && webView === view) failed(error)
+                } }
             } })
         bridge = controller
         try { controller.install() } catch (_: Exception) {
@@ -243,31 +281,64 @@ class MainActivity : Activity() {
         })
     }
     private fun refreshSession(api: NativeApiClient, ready: () -> Unit, failed: (Exception) -> Unit) {
+        val expectedScreen = screenVersion
+        val expectedSession = ++sessionVersion
+        val expectedView = webView
+        val expectedCredential = currentCredential
+        fun current(): Boolean = isCurrentActivity() && screenVersion == expectedScreen &&
+            sessionVersion == expectedSession && webView === expectedView && currentCredential === expectedCredential &&
+            expectedCredential?.origin == api.origin
         worker.execute {
             try {
-                val cookies = api.session().second.filter { it.startsWith("local_assistant_session=") }
+                val response = api.session()
+                if (response.first.optString("device_id") != expectedCredential?.deviceId)
+                    throw ApiException(0, "session_identity_mismatch", "網頁登入與已配對裝置身分不一致")
+                val cookies = response.second.filter { it.startsWith("local_assistant_session=") }
                 if (cookies.size != 1 || !cookies[0].contains("httponly", true) || !cookies[0].contains("secure", true))
                     throw ApiException(0, "session_cookie_invalid", "登入 Cookie 不符合安全要求")
                 runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    CookieManager.getInstance().setCookie("${api.origin}/", cookies[0]) { accepted ->
-                        if (accepted) { CookieManager.getInstance().flush(); ready() }
-                        else failed(ConnectionFailure(ConnectionPhase.SESSION_COOKIE, IllegalStateException("Cookie rejected"), api.origin))
+                    if (!current()) return@runOnUiThread
+                    // Serialize asynchronous CookieManager writes. An old account's in-flight
+                    // installation must finish before the new account can load its page.
+                    queueCookieMutation(::current) { done ->
+                        CookieManager.getInstance().setCookie("${api.origin}/", cookies[0]) { accepted ->
+                            if (current()) {
+                                if (accepted) { CookieManager.getInstance().flush(); ready() }
+                                else failed(ConnectionFailure(ConnectionPhase.SESSION_COOKIE, IllegalStateException("Cookie rejected"), api.origin))
+                            }
+                            done()
+                        }
                     }
                 }
-            } catch (error: Exception) { runOnUiThread { if (!isFinishing && !isDestroyed) failed(ConnectionFailure(ConnectionPhase.SESSION_REQUEST, error, api.origin)) } }
+            } catch (error: Exception) { runOnUiThread { if (current()) failed(ConnectionFailure(ConnectionPhase.SESSION_REQUEST, error, api.origin)) } }
         }
     }
-    private fun revoke(credential: DeviceCredential, status: TextView) {
+    private fun revoke(credential: DeviceCredential, status: TextView, finished: () -> Unit) {
+        val expectedScreen = screenVersion
+        fun current() = isCurrentActivity() && screenVersion == expectedScreen && currentCredential == null
         AlertDialog.Builder(this).setTitle("停用這台裝置？")
-            .setMessage("將通知中樞撤銷存取權，並移除本機配對憑證。已保存的本機筆記仍保留。")
+            .setMessage("將通知中樞撤銷存取權，並移除本機配對憑證。手機記事本 App 的記事不受影響。")
             .setPositiveButton("停用") { _, _ -> worker.execute {
                 try {
                     NativeApiClient(credential.origin, credential.token).call("POST", "/v1/auth/revoke-device")
-                    credentials.clear()
-                    runOnUiThread { CookieManager.getInstance().removeAllCookies { CookieManager.getInstance().flush(); showSetup() } }
-                } catch (_: Exception) { runOnUiThread { status.text = "無法通知中樞停用，配對憑證已保留。請恢復連線後再試。" } }
-            } }.setNegativeButton("取消", null).show()
+                    runOnUiThread {
+                        if (!current()) return@runOnUiThread
+                        val cleared = runCatching { if (credentials.load() == credential) credentials.clear() }.isSuccess
+                        ++sessionVersion
+                        queueCookieMutation(::current) { done ->
+                            CookieManager.getInstance().removeAllCookies {
+                                if (current()) {
+                                    CookieManager.getInstance().flush()
+                                    showSetup(if (cleared) "" else "後端已停用裝置，但手機憑證未能移除。請重新配對。")
+                                }
+                                done()
+                            }
+                        }
+                    }
+                } catch (_: Exception) { runOnUiThread {
+                    if (current()) { status.text = "無法通知中樞停用，配對憑證已保留。請恢復連線後再試。"; finished() }
+                } }
+            } }.setNegativeButton("取消") { _, _ -> finished() }.setOnCancelListener { finished() }.show()
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         if (!this.permissions.onRequestPermissionsResult(requestCode, permissions, grantResults))
@@ -286,11 +357,53 @@ class MainActivity : Activity() {
         val view = webView
         if (view?.canGoBack() == true) view.goBack() else super.onBackPressed()
     }
+    override fun onResume() {
+        super.onResume()
+        foreground = true
+        if (APP_ACTIVITY_VERSION.get() != activityVersion) {
+            // An older Activity may return from the Android back stack after another
+            // instance paired a different account. Restore only the current saved identity.
+            activityVersion = APP_ACTIVITY_VERSION.incrementAndGet()
+            val saved = runCatching { credentials.load() }.getOrNull()
+            if (saved == null) showSetup() else openAssistant(saved)
+        }
+    }
+    override fun onStop() {
+        foreground = false
+        NativeConfirmation.cancelForActivity(this)
+        bridge?.cancelRecording("background")
+        super.onStop()
+    }
     override fun onDestroy() {
         ++screenVersion
+        ++sessionVersion
+        APP_ACTIVITY_VERSION.compareAndSet(activityVersion, activityVersion + 1)
+        foreground = false
+        NativeConfirmation.cancelForActivity(this)
+        bridge?.cancelRecording("background")
         fileCallback?.onReceiveValue(null); fileCallback = null
         webView?.destroy(); webView = null
         super.onDestroy()
+    }
+    private fun isCurrentActivity() = APP_ACTIVITY_VERSION.get() == activityVersion && !isFinishing && !isDestroyed
+    private fun queueCookieMutation(current: () -> Boolean, perform: (done: () -> Unit) -> Unit) {
+        val operation = operation@{
+            if (!current()) return@operation
+            cookieInstallRunning = true
+            var completed = false
+            val done = {
+                if (!completed) {
+                    completed = true
+                    cookieInstallRunning = false
+                    val queued = pendingCookieInstall
+                    pendingCookieInstall = null
+                    queued?.invoke()
+                }
+                Unit
+            }
+            try { perform(done) } catch (_: Exception) { done() }
+        }
+        if (cookieInstallRunning) pendingCookieInstall = operation else operation()
     }
     private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
     @Suppress("DEPRECATION")

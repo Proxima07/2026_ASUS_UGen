@@ -1,11 +1,11 @@
-// @web-revision: web-v6
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v6';
-import {CaptureCoordinator,CaptureSession,stopTracks} from './capture.js?rev=web-v6';
-import {uncertainResponse} from './conversation.js?rev=web-v6';
-export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v6';
+// @web-revision: web-v7
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v7';
+import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v7';
+import {uncertainResponse} from './conversation.js?rev=web-v7';
+export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v7';
 
 const VOICE_BUSY=new Set(['requesting','recording','stopping','uploading','received_audio','queued','transcribing','transcribed','sending','received_request','understanding','dispatching','waiting','reading_result','sending_selection','selecting']);
-const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.save_local','notes.share','notes.search_local','notes.update_local']);
+const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.create_native','notes.share']);
 
 // One owner, including while a microphone permission request is pending.
 // Local amplitude gate: no cloud recognition, no speech-to-text in the browser.
@@ -55,8 +55,12 @@ export class VoiceFlow {
     try{
       const type=validateAudio(blob);this.setState('uploading','正在將語音交給私人設備…');
       const job=await this.api.uploadCommandAudio(blob,type);if(!this.current(run))return;
-      if(!job.job_id)throw new Error('後端沒有回傳錄音工作編號。');run.jobId=job.job_id;this.updateDebug({jobId:job.job_id,traceId:job.trace_id||null,audioHttpId:job.http_request_id||null});this.setState(job.status==='queued'?'queued':'received_audio',job.status==='queued'?'後端已收到錄音，正在排隊；尚未開始轉錄。':'後端已收到錄音，正在查詢處理階段。');await this.pollAudio(run);
+      await this.acceptUploadedJob(run,job);
     }catch(error){this.fail(run,error);}
+  }
+  async acceptUploadedJob(run,job){
+    if(!this.current(run)||run.jobId)return;
+    try{if(!job?.job_id)throw new Error('後端沒有回傳錄音工作編號。');run.jobId=job.job_id;this.updateDebug({jobId:job.job_id,traceId:job.trace_id||null,audioHttpId:job.http_request_id||null});this.setState(job.status==='queued'?'queued':'received_audio',job.status==='queued'?'後端已收到錄音，正在排隊；尚未開始轉錄。':'後端已收到錄音，正在查詢處理階段。');await this.pollAudio(run);}catch(error){this.fail(run,error);}
   }
   async pollAudio(run){
     if(!this.current(run))return;
@@ -135,10 +139,10 @@ export class VoiceFlow {
 const STAGE_LABELS={idle:'準備好',requesting:'等待麥克風權限',recording:'收聽中',stopping:'錄音收尾中',uploading:'上傳錄音中',received_audio:'後端已收音訊',queued:'後端排隊中',transcribing:'STT 轉錄中',transcribed:'STT 轉錄完成',sending:'送出指令／等待 Agent',received_request:'指令編號已回覆',understanding:'Agent 理解中',dispatching:'交給手機',waiting:'等待手機確認',reading_result:'確認手機結果',sending_selection:'送出選擇',selecting:'請選擇對象',completed:'處理結果',clarify:'請補充資訊',paused:'流程已停止',failed:'未完成'};
 
 export class Voice {
-  constructor({api,bridge,capture,conversations=null,authenticated=()=>false,toast=()=>{},silenceOptions={}}){
-    Object.assign(this,{capture,authenticated,toast,silenceOptions});
+  constructor({api,bridge,capture,conversations=null,authenticated=()=>false,identity=()=>null,toast=()=>{},silenceOptions={}}){
+    Object.assign(this,{bridge,capture,authenticated,identity,toast,silenceOptions});
     this.session=null;this.recorder=null;this.clockTimer=null;this.sampleTimer=null;this.limitTimer=null;this.startedAt=0;
-    this.canRecord=Boolean(globalThis.MediaRecorder&&navigator.mediaDevices?.getUserMedia);
+    this.canRecord=Boolean(globalThis.NativeBridge?.postMessage||bridge.nativePresent||globalThis.MediaRecorder&&navigator.mediaDevices?.getUserMedia);
     this.button=document.querySelector('#voice-mic');this.stopButton=document.querySelector('#voice-stop');this.cancelButton=document.querySelector('#voice-cancel');
     this.status=document.querySelector('#voice-status');this.stage=document.querySelector('#voice-stage');this.time=document.querySelector('#voice-time');this.level=document.querySelector('#voice-level');
     this.transcript=document.querySelector('#voice-transcript');this.reply=document.querySelector('#voice-reply');this.choices=document.querySelector('#voice-choices');
@@ -146,7 +150,7 @@ export class Voice {
       onState:(state,message)=>this.renderState(state,message),onDebug:value=>this.renderDebug(value),
       onTranscript:text=>{this.transcript.textContent=text;document.querySelector('#voice-transcript-wrap').hidden=!text;},
       onRecord:record=>this.renderRecord(record),onChoices:(kind,items)=>this.renderChoices(kind,items)});
-    this.button.addEventListener('click',()=>{if(this.session?.state==='recording')this.stop(true);else this.start();});
+    this.button.addEventListener('click',()=>{if(this.session?.state==='recording')this.stop(true);else if(['requesting','stopping'].includes(this.flow.state))this.interrupt('已取消這次錄音，音訊沒有送出。');else this.start();});
     this.stopButton.addEventListener('click',()=>this.stop(true));
     this.cancelButton.addEventListener('click',()=>{const recording=['requesting','recording','stopping'].includes(this.flow.state);this.interrupt(recording?'已取消這次錄音，音訊沒有送出。':'已停止本頁後續處理；已送出的後端工作可能仍在進行。手機已收到的操作請自行確認。');});
     document.addEventListener('visibilitychange',()=>{if(document.hidden)this.interrupt(['requesting','recording','stopping'].includes(this.flow.state)?'已停止並捨棄這次錄音。回到畫面後，可以重新開始。':'已停止本頁後續處理；已送出的後端工作可能仍在進行。');});
@@ -156,11 +160,12 @@ export class Voice {
   renderState(state,message){
     const recording=state==='recording',busy=VOICE_BUSY.has(state);
     this.status.textContent=message||'點一下，開始說話。';this.stage.textContent=STAGE_LABELS[state]||'處理中';
-    this.button.classList.toggle('listening',recording);this.button.classList.toggle('working',busy&&!recording);
-    this.button.disabled=!this.canRecord||(busy&&!recording);this.button.setAttribute('aria-label',recording?'結束錄音並送出':'開始語音指令');this.button.setAttribute('aria-pressed',String(recording));
+    this.button.classList.toggle('listening',recording);this.button.classList.toggle('requesting',state==='requesting');this.button.classList.toggle('working',busy&&!recording&&state!=='requesting');
+    this.button.disabled=!this.canRecord||(busy&&!['requesting','recording','stopping'].includes(state));this.button.setAttribute('aria-label',recording?'結束錄音並送出':['requesting','stopping'].includes(state)?'取消這次錄音':'開始語音指令');this.button.setAttribute('aria-pressed',String(recording));
     this.stopButton.hidden=!recording&&state!=='stopping';this.stopButton.disabled=!recording;
     this.cancelButton.hidden=!busy;this.cancelButton.disabled=false;
     this.cancelButton.textContent=['requesting','recording','stopping'].includes(state)?'取消錄音':'停止本頁後續處理';
+    this.cancelButton.classList.toggle('capture-cancel',busy);this.stopButton.classList.toggle('capture-stop',recording);
     document.querySelector('#voice-meter-wrap').hidden=!recording;
     document.querySelector('#voice-mic-label').textContent=recording?'收聽中 · 說完請按下方按鈕':state==='stopping'?'已結束收聽，正在收尾音訊':busy?'處理進度會顯示在下方':'點一下，開始錄音';
   }
@@ -174,7 +179,7 @@ export class Voice {
     let text=record.error?.message||record.message||labelForStatus(record.status);
     if(record.notes?.length)text+='\n\n'+record.notes.map(n=>`${n.title||'筆記'}${n.preview?`\n${n.preview}`:n.content?`\n${n.content}`:''}`).join('\n\n');
     if(record.note)text+=`\n\n${record.note.title||''}${record.note.content?`\n${record.note.content}`:''}`;
-    if(record.storage_target)text+=record.storage_target==='phone'?'\n\n保存位置：手機':'\n\n保存位置：私人中樞';
+    if(record.storage_target)text+=['phone','phone_app','native'].includes(record.storage_target)?'\n\n請在手機記事本 App 確認內容並儲存。':'\n\n保存位置：平台筆記';
     if(record.status==='completed'&&record.candidates?.length)text+='\n\n'+record.candidates.map(c=>`${c.name||'未命名'} · ${c.phone_number||''}`).join('\n');
     this.reply.textContent=text;document.querySelector('#voice-reply-wrap').hidden=false;
   }
@@ -182,29 +187,45 @@ export class Voice {
   async start(){
     if(VOICE_BUSY.has(this.flow.state))return;if(!this.authenticated())return this.toast('請先完成連線配對。');
     const token=this.capture.acquire('voice');if(!token)return this.toast('另一段錄音正在進行，請先結束它。');
-    const run=this.flow.begin();if(!run){this.capture.release(token);return;}
-    let session;
-    session=new CaptureSession({coordinator:this.capture,token,
-      onPhase:phase=>{if(this.session!==session||!this.flow.current(run))return;if(phase==='recording')this.flow.recording(run);else if(phase==='stopping')this.flow.setState('stopping','已結束收聽，正在收尾錄音…');},
-      onBlob:blob=>{if(this.session!==session||!this.flow.current(run))return;this.clearCaptureTimers(session);this.session=null;this.recorder=null;this.flow.acceptAudio(run,blob);},
-      onError:error=>{if(this.session!==session)return;this.clearCaptureTimers(session);this.session=null;this.recorder=null;this.flow.fail(run,error);}});
-    this.session=session;this.time.textContent='00:00';this.level.value=0;
+    let run,session;
     try{
+      run=this.flow.begin();if(!run){this.capture.release(token);return;}
+      const onPhase=phase=>{
+        if(this.session!==session||!this.flow.current(run))return;
+        if(phase==='recording'){this.startedAt=performance.now();this.flow.recording(run);this.startClock(session);}
+        else if(phase==='stopping')this.flow.setState('stopping','已結束收聽，正在收尾錄音…');
+        else if(phase==='uploading')this.flow.setState('uploading','手機音檔錄製完成，正在上傳私人設備…');
+      };
+      const onError=error=>{if(this.session!==session)return;this.clearCaptureTimers(session);this.session=null;this.recorder=null;this.flow.fail(run,error);};
+      const finish=()=>{if(this.session!==session||!this.flow.current(run))return false;this.clearCaptureTimers(session);this.session=null;this.recorder=null;return true;};
+      if(this.bridge?.nativePresent){
+        session=new NativeCaptureSession({bridge:this.bridge,identity:this.identity(),coordinator:this.capture,token,onPhase,onError,
+          onProgress:progress=>{if(this.session===session&&this.flow.current(run))this.level.value=Number.isFinite(progress.level)?Math.max(0,Math.min(1,progress.level)):0;},
+          onUploaded:job=>{if(finish())this.flow.acceptUploadedJob(run,job);},
+          onCancel:message=>{if(finish())this.flow.cancel(message||'手機錄音已取消，音訊沒有送出。');}});
+        this.session=session;this.time.textContent='00:00';this.level.value=0;session.start();return;
+      }
+      session=new CaptureSession({coordinator:this.capture,token,onPhase,onError,onBlob:blob=>{if(finish())this.flow.acceptAudio(run,blob);}});
+      this.session=session;this.time.textContent='00:00';this.level.value=0;
       if(!globalThis.isSecureContext)throw new Error('語音需要 HTTPS，請使用你的安全網域。');
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      if(this.session!==session||!this.flow.current(run)||session.finalized){stopTracks(stream);session.cancel();return;}
-      session.setStream(stream);
+      const stream=await session.requestStream(()=>navigator.mediaDevices.getUserMedia({audio:true}));
+      if(!stream)return;
+      if(this.session!==session||!this.flow.current(run)||session.finalized){session.cancel();return;}
       const type=['audio/webm;codecs=opus','audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/ogg;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));
       const recorder=new MediaRecorder(stream,type?{mimeType:type}:undefined);this.recorder=recorder;session.attach(stream,recorder);
-      this.startedAt=performance.now();if(!session.start())return;
-      // Clock starts independently: a suspended AudioContext cannot freeze UI.
-      this.clockTimer=setInterval(()=>{if(this.session!==session||session.state!=='recording')return;const seconds=Math.floor((performance.now()-this.startedAt)/1000);this.time.textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;},200);
+      if(!session.start())return;
       this.limitTimer=setTimeout(()=>{if(this.session===session)this.stop(true);},180000);
       this.startSilenceDetector(run,session,stream);
     }catch(error){
-      session.cancel();if(this.session!==session)return;this.clearCaptureTimers(session);this.session=null;this.recorder=null;
-      this.flow.fail(run,new Error(error.name==='NotAllowedError'?'麥克風沒有取得授權，請在 APK／瀏覽器設定允許。':errorMessage(error)));
+      try{session?.cancel();}finally{this.capture.release(token);}
+      if(session&&this.session!==session)return;if(session)this.clearCaptureTimers(session);this.session=null;this.recorder=null;
+      if(run)this.flow.fail(run,new Error(errorMessage(error)));
+      else{this.flow.generation++;this.flow.run=null;this.flow.state='failed';try{this.renderState('failed','錄音介面未能啟動，請重新整理套用完整網頁更新。');}catch{}this.toast('錄音介面未能啟動，麥克風已釋放，請重新整理。');}
     }
+  }
+  startClock(session){
+    clearInterval(this.clockTimer);
+    this.clockTimer=setInterval(()=>{if(this.session!==session||session.state!=='recording')return;const seconds=Math.floor((performance.now()-this.startedAt)/1000);this.time.textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;},200);
   }
   async startSilenceDetector(run,session,stream){
     try{
@@ -224,13 +245,13 @@ export class Voice {
     const session=this.session;if(!session)return;
     if(!send){this.interrupt('已取消這次錄音，音訊沒有送出。');return;}
     if(session.state==='requesting'){this.interrupt('錄音尚未開始，已取消等待麥克風。');return;}
-    this.clearCaptureTimers(session);session.stop(true);
+    try{this.clearCaptureTimers(session);}finally{session.stop(true);}
   }
   clearCaptureTimers(session){if(this.session!==session)return;clearInterval(this.clockTimer);clearInterval(this.sampleTimer);clearTimeout(this.limitTimer);this.clockTimer=null;this.sampleTimer=null;this.limitTimer=null;if(this.level)this.level.value=0;}
   interrupt(message){
-    const session=this.session;this.flow.cancel(message||'已停止本頁後續處理；已送出的後端工作可能仍在進行。');
-    if(session){this.clearCaptureTimers(session);session.cancel();if(this.session===session)this.session=null;}
-    this.recorder=null;
+    const session=this.session;
+    try{this.flow.cancel(message||'已停止本頁後續處理；已送出的後端工作可能仍在進行。');}
+    finally{try{if(session)this.clearCaptureTimers(session);}finally{if(session){session.cancel();if(this.session===session)this.session=null;}this.recorder=null;}}
   }
   clear(message='請先完成連線配對。'){this.interrupt(message);this.flow.state='idle';this.renderState('idle',message);this.flow.lastRequestId=null;this.flow.debug={history:[]};this.renderDebug(this.flow.debug);this.transcript.textContent='';this.reply.textContent='';this.choices.replaceChildren();this.time.textContent='';document.querySelector('#voice-transcript-wrap').hidden=true;document.querySelector('#voice-reply-wrap').hidden=true;}
 }

@@ -1,5 +1,15 @@
 # Android 更新紀錄
 
+## v5 — 2026-10-12
+
+- 新增MediaRecorder MIC→MPEG_4/AAC .m4a，App私有暫存完整音檔，停止後以原生HTTPS raw body上傳command音訊API；Bearer不交JavaScript。
+- 錄音ID／origin／主框架與expected user/device核對；每250ms回報elapsed／amplitude，15秒啟動期限，180秒／8MiB上限。
+- 停止／取消／背景／頁面離開／銷毀釋放Recorder與cache，啟動清孤立檔；取消上傳不冒稱後端撤回，不自動重傳。
+- 新增notes.create_native：CREATE_NOTE或文字分享選擇器，顯示原生確認，只回handed_off，使用者在記事本內確認保存。
+- 移除自建加密筆記入口與save/search/update能力，原檔與金鑰保留不自動搬移；沒有宣稱通用預設記事本讀取或更新。
+- 保留電話、鬧鐘、timer、日曆、HTTPS配對、結果收據與同步防重複。
+- 最終assembleDebug通過，versionName1.4／code5，APK v2簽章有效且與舊版同憑證；大小4,746,762 bytes。雜湊見releases/README.md，尚未目標手機錄音／記事本／覆蓋安裝驗收。
+
 ## v4 — 2026-10-12
 
 - 新增 timer.create，原生確認倒數長度／名稱後，以 ACTION_SET_TIMER、EXTRA_LENGTH／MESSAGE 交給時鐘，SKIP_UI=false。

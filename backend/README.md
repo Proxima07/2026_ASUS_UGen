@@ -1,207 +1,121 @@
-# Python 本地中樞 backend_v5
+# Python 本地中樞 backend_v6
 
-本版本先交付三段架構中的 **Python 中樞**。它透過 OpenAI 相容 API 呼叫你自己的模型，建立結構化操作、保存加密筆記，以及接收手機端的實際操作結果。
+Python／FastAPI 中樞使用你在 `.env` 配置的 OpenAI 相容本地 LLM 與 STT，負責理解指令、保存加密對話、簽派手機操作及驗證實際結果。網站由同一個服務提供；使用你已配置的 cloudflared，不需要改用專案 Tunnel 範例。
 
-網頁與 APK 會接相同 API，但 **本 ZIP 尚未包含可使用的網頁或 APK**。日曆／電話服務維持原本的同步行為；保護範圍是 LLM 的理解、上下文、記憶與決策鏈。
+v6 是 backend_v5 的差異更新，搭配 web_v7／android_v5。修正共用 PoC 身分導致的平台筆記跨裝置可見，並將日常筆記改為交接手機自己的記事本 App。APK 原生錄成完整音訊檔後上傳，後端仍使用原有檔案轉錄 API。
 
-v5 是套用在 backend_v4 上的差異更新，新增多輪上下文、日曆預設與手機倒數計時器，配合 web_v6／android_v4。既有 v1 → v2 → v3 → v4 → v5 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。v4 的階段 log 與語音追蹤保留。
+## 安裝與啟動
 
-## 多輪上下文與預設
+ZIP 保留 `local-assistant/` 根目錄；解壓到現有 local-assistant 的上一層，讓 backend、web、android 並列。來源差異包需依序覆蓋；本版不包含未更新的舊檔。
 
-文字與語音以 conversation_id 接續同一頁對話。後端從本裝置已保存的 user／assistant 訊息與實際操作狀態組合歷史，避免只有畫面記得前文、模型卻只看到最新一句。開始新對話用 conversation_id=new；接續要帶上一輪 request_id 作為 parent_request_id。舊用戶端省略欄位仍可單句使用。
-
-歷史採加密保存，預設最多 12 則歷史訊息、16000 字元，可在 .env 設定：
-
-```dotenv
-CONVERSATION_MAX_MESSAGES=12
-CONVERSATION_MAX_CHARS=16000
-```
-
-訊息數可設 2–40、歷史字數可設 2000–48000；這是歷史參考預算，最新 user 訊息與工具 Schema 另外計入模型輸入。前端只在本頁保存對話 ID，重新整理或「新對話」會開啟新的範圍；沒有跨頁歷史列表或長期偏好記憶介面。
-
-日曆可指定 duration_minutes，由後端計算結束時間；未指定時長預設 30 分鐘、提前 10 分鐘提醒，缺少標題用中性「行程」。開始日期／時刻仍須足夠資訊。預設說明與實際值會出現在網頁／APK 確認內容。
-
-新增 timer.create，使用 duration_seconds（1–86400 整數）與 label。倒數 10 分鐘是 600 秒，固定時刻仍使用 alarm.create／calendar.create。手機透過新 APK 交給支援的時鐘 App；交接不宣稱計時器已開始。詳見 docs/backend_v5.md。
-
-## 本版除錯紀錄
-
-預設 INFO 級 JSON 事件直接顯示在終端機／PyCharm Run Console。可看到音訊收到、工作建立、STT 開始與完成、指令收到及 Agent 規劃結果；包含 job／request／trace ID、長度、耗時及操作種類。正常 GET 輪詢紀錄歸 DEBUG，避免每秒查狀態造成大量訊息。
-
-既有 .env 可以追加：
-
-```dotenv
-LOG_LEVEL=INFO
-LOG_COMMAND_TEXT=false
-```
-
-若要在本機除錯時確認實際指令文字，可將 LOG_COMMAND_TEXT 設為 true；最多輸出 200 字元，內容會出現在終端機。配對碼、token、Cookie、音訊與模型服務商原始錯誤都不列印。事件時間使用 UTC；與手機比對時留意時區。
-
-每個 HTTP 回應有後端產生的 X-Request-ID。音訊工作保存 trace_id；web_v5 用 source_job_id 連結該裝置已轉錄的指令，Agent 請求沿用同一流程 trace，可用前端的除錯資訊搜尋終端機。HTTP 個別請求 ID 與整段語音 trace 的用途分開，並不表示所有輪詢都使用同一 HTTP ID。
-
-本次不覆蓋現有 .env；保存配置後重啟後端，啟動方法不變。詳細事件及排錯順序見 docs/backend_v4.md。
-
-## 語音首頁與手機筆記優先
-
-web_v3 點麥克風錄音，停頓或手動結束後會自動轉錄並送 `/v1/chat`。轉錄使用 `POST /v1/audio?purpose=command` 的 raw 音訊 body；這個模式只轉錄，不先把指令當成筆記摘要。原本的錄音整理仍使用預設 purpose=note。
-
-語音請求帶 `note_target=phone_first` 與 APK 握手取得的 native_capabilities。這些是路由提示，不是身分或操作授權；APK 仍以自己的裝置憑證取得 action、顯示原生確認，再回報結果。
-
-- notes.create：優先交給 APK 的加密手機筆記，手機保存成功時不建立平台筆記。
-- notes.search：先查手機筆記；只回傳受限標題、識別碼與短預覽。
-- notes.update：以 query 查找明確筆記，支援 mode=replace／append；多筆同名要澄清，不猜對象。
-- 沒有手機能力或收到明確失敗結果才使用平台備援。取消、逾時或執行結果不明，不另存另一份或重做手機操作。
-
-平台備援更新也需有明確存在的對象，不能把「更新」當作建立新筆記。純瀏覽器仍無法直接操作系統鬧鐘、日曆或通訊錄；手機操作要在 APK 內開啟網頁。
-
-本版的「手機筆記」是 APK 自己的本機加密筆記區；各廠牌內建記事 App 的直接寫入沒有通用介面，既有分享能力另放在工具子頁。
-
-## 1. 目錄
-
-ZIP 內保留 `local-assistant/` 根目錄，子路徑如下：
-
-| 路徑 | 用途 |
-| --- | --- |
-| `backend/` | Python API、Agent 與加密儲存 |
-| `contracts/` | 共用操作格式 |
-| `deploy/pi/` | Cloudflare Tunnel 與啟動範例 |
-| `docs/backend_v1.md` 至 `docs/backend_v5.md` | 各版本功能與驗收 |
-| `scripts/` | 共用協定匯出與差異封裝 |
-
-解壓縮後保留 `local-assistant/` 根目錄，不要把每個檔案拆到不同位置。
-
-## 2. 安裝與設定
-
-環境：Python 3.11 或以上。Pi 使用 64 位元 Linux；本 API 本身不需要 GPU。
-
-Linux／macOS，在 `local-assistant/backend` 中執行：
+需要 Python 3.11 以上。首次安裝在 local-assistant/backend 執行：
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Linux／macOS：
+
+```bash
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Windows PowerShell：
+將產生的隨機值填入 .env 的 ADMIN_BOOTSTRAP_TOKEN。既有部署保留原 .env，不用範例覆蓋配置。
 
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
-.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-將最後產生的隨機值填入 `.env` 的 `ADMIN_BOOTSTRAP_TOKEN`，並將 `.env` 留在本機。Linux 建議執行 `chmod 600 .env`。
-
-主要設定如下；完整欄位以 `.env.example` 為準：
-
-| 變數 | 用途 |
-|---|---|
-| `LLM_BASE_URL` | OpenAI 相容服務的 API 根位址，通常包含 `/v1` |
-| `LLM_MODEL` | 服務端實際可用的模型名稱，不由本程式下載模型 |
-| `LLM_API_KEY` | 該服務要求的 API key；本地無驗證服務可用其接受的占位值 |
-| `LLM_OUTPUT_MODE` | `json_object`、`json_schema` 或 `none`；依模型服務支援選擇 |
-| `LLM_CA_BUNDLE` | 自簽 CA／私人 CA 的 PEM 檔案路徑，驗證 HTTPS 憑證 |
-| `LLM_ALLOW_NONLOCAL` | 預設 `false`，避免誤接公開遠端模型；放寬會改變資料邊界 |
-| `STT_BASE_URL` | 選配 OpenAI 相容語音轉錄 API；空值代表錄音轉錄尚未啟用 |
-| `STT_MODEL` | 轉錄服務提供的模型名稱 |
-| `PUBLIC_BASE_URL` | 手機使用的完整 HTTPS 網址，例如 `https://assistant.example.com` |
-| `ADMIN_BOOTSTRAP_TOKEN` | 產生一次性配對碼的管理憑證，至少 32 字元，不交給一般使用者 |
-| `DATA_DIR` | SQLite 與執行資料目錄；相對路徑以 `backend/` 為基準 |
-| `SESSION_TTL_SECONDS` | 網頁 session 有效時間 |
-| `ACTION_TTL_SECONDS` | 尚未執行操作的有效時間 |
-| `ACTION_LEASE_SECONDS` | 確認後執行憑證的有效時間 |
-| `ENABLE_API_DOCS` | 開啟 `/docs` 本機路由列表及 `/openapi.json`；不使用外部 CDN 或互動 Swagger |
-| `LOG_LEVEL` | 後端事件及 Uvicorn 層級，預設 INFO；DEBUG 可查看輪詢 HTTP |
-| `LOG_COMMAND_TEXT` | 預設 false；true 時將有限長度的指令文字印到本機終端機 |
-| `CONVERSATION_MAX_MESSAGES` | 最多帶入的歷史訊息，預設 12，範圍 2–40 |
-| `CONVERSATION_MAX_CHARS` | 歷史文字總預算，預設 16000，範圍 2000–48000 |
-
-模型端必須已啟動並具備你填寫的模型。`qwen3:4b` 等名稱只是設定範例，並非本 ZIP 已內附的模型。
-
-中樞到模型若為 **同機 loopback**，可使用 `http://127.0.0.1:11434/v1`。若模型在另一台私人主機，使用可驗證 CA 的 HTTPS；不以略過憑證驗證處理問題。私人 IP 位址也不代表加密。
-
-## 3. 啟動
-
-Linux／macOS：
+工作目錄設為 local-assistant/backend，以目前 Python 環境啟動：
 
 ```bash
 python -m app.run
 ```
 
-Windows PowerShell：
+PyCharm 的 Run Configuration 選 **Module name：app.run**，Working directory 指向實際 local-assistant/backend，Interpreter 選已安裝 requirements 的環境。不必輸入完整專案路徑；直接執行深層 app/run.py 可能因匯入路徑不同而失敗。
 
-```powershell
-.\.venv\Scripts\python.exe -m app.run
-```
+後端只監聽 127.0.0.1:8000，埠號可用 PORT 設定。既有 cloudflared 的該 hostname 指向同機此服務；網頁、/health、/v1/* 需一起到達同一後端。
 
-API 只綁定 `127.0.0.1:8000`；可以在 `.env` 設定 `PORT`。手機不直接連這個 loopback，而是連到同機 `cloudflared` 對外提供的 HTTPS 網域。
+## .env 配置
 
-可先在 Pi 本機檢查存活狀態；這個檢查不會呼叫模型：
+完整欄位見 .env.example。主要設定：
 
-```bash
-curl http://127.0.0.1:8000/health
-```
+| 設定 | 用途 |
+|---|---|
+| LLM_BASE_URL／LLM_MODEL／LLM_API_KEY | OpenAI 相容服務根網址、實際模型名稱與該服務憑證 |
+| LLM_OUTPUT_MODE | 模型支援的 json_object、json_schema 或 none |
+| LLM_CA_BUNDLE／LLM_ALLOW_NONLOCAL | 私人 CA；預設限制模型端點為本地／私人服務 |
+| STT_BASE_URL／STT_MODEL／STT_API_KEY | 你已提供的 OpenAI 相容音檔轉錄服務 |
+| STT_CA_BUNDLE／STT_ALLOW_NONLOCAL | STT 憑證與端點限制 |
+| PUBLIC_BASE_URL | 實際 HTTPS origin，例如 https://2026-asus-ugen.aphelion.tw |
+| WEB_DIR | 預設 ../web；相對路徑以 backend 為基準 |
+| DATA_DIR | SQLite／金鑰所在目錄，預設 runtime |
+| TIMEZONE | 預設 Asia/Taipei |
+| ADMIN_BOOTSTRAP_TOKEN | 管理端產生配對碼，至少 32 字元；不交給手機或前端 |
+| ACTION_LEASE_SECONDS | 建議 600 秒，讓手機確認與授權有足夠時間 |
+| MAX_AUDIO_BYTES | 單段音訊上限，預設 10 MiB |
+| LOG_LEVEL／LOG_COMMAND_TEXT | 預設 INFO；預設不輸出指令文字 |
+| CONVERSATION_MAX_MESSAGES／CONVERSATION_MAX_CHARS | 預設 12 則歷史訊息／16000 字元 |
+| DEFAULT_USER_ID | 僅相容舊配置；新配對不再使用這個共用身分 |
 
-## 4. Cloudflare Tunnel
+同機模型可使用 http://127.0.0.1:11434/v1；跨機模型／STT 使用可驗證的 HTTPS。私人 IP 本身不代表加密，不略過 TLS 驗證。模型名稱只是配置，不由這份專案自動下載。
 
-先在 Cloudflare 建立 Tunnel 與 DNS 指向；將 `deploy/pi/cloudflared.example.yml` 複製到實際設定位置，填寫：
+## 配對與筆記隔離
 
-- Tunnel UUID。
-- **實際存於該 Pi 的** credentials JSON 路徑。
-- `assistant.example.com` 換成你的 `sub.domain`。
-
-範例 origin 是 `http://127.0.0.1:8000`，只在 cloudflared 與 API **同一台 Pi** 的 loopback 使用。網頁與 API 之後共用這個 HTTPS origin；不需要為網頁與 `/v1` 各開一個網域。
-
-手機到 Cloudflare 使用 HTTPS，Cloudflare 到 cloudflared 的 Tunnel 另外加密。**HTTPS 在 Cloudflare edge 終止，因此 Cloudflare 可處理解密後的請求內容。** 這個配置能避免外部網路明文傳輸，不能稱為「只有手機與 Pi 能解密」；LLM 推論與加密記憶仍在你的私人設備執行和保存。
-
-第一版以 HTTPS 加裝置 token／安全 session 驗證，不實作用戶端憑證 mTLS。這符合目前「避免明文 API 傳輸」的要求；若之後加 mTLS，另以獨立版本交付。
-
-## 5. 配對與測試
-
-配對順序：管理端產生短效一次性碼 → 裝置兌換碼取得 token → 原生 APK 使用 bearer token；網頁則換成 `HttpOnly`、`Secure`、`SameSite=Strict` 的 session cookie。
-
-後端啟動後，在同一台 Pi 的另一個終端機、相同 backend 目錄及 Python 環境執行：
+啟動後，在另一個終端機、相同 backend 目錄與 Python 環境執行：
 
 ```bash
 python examples/create_pairing_code.py
 ```
 
-將印出的短效碼填入手機 APK，網站網址則填 `.env` 的 `PUBLIC_BASE_URL`。一般瀏覽器也可以在網頁登入介面輸入此碼；兩者需分別產生不同碼。此工具不列印初始化管理憑證。
+每次產生的碼短效且只能使用一次，預設綁定由後端產生的獨立使用者。Chrome 與 APK 需使用不同碼；已在 Chrome 使用的碼即使未過期也不能給 APK 重用。裝置名稱不決定帳號，未登入的 /pair 不能自行選擇他人的使用者。
 
-`ADMIN_BOOTSTRAP_TOKEN` 只給管理端，不能放入 JavaScript、APK 或分享給測試者。裝置 token 不應記錄在畫面截圖或日誌中。
+**v6 修正舊版共用 poc-user 與只依 user_id 查筆記的授權錯誤。** 所有平台筆記存取及由筆記衍生的手機動作均需符合目前使用者與原始建立裝置。既有裝置憑證保留，可讀自己的舊筆記；資料庫內容、原本加密身分與金鑰保留，不把舊資料全部分配給新裝置。
 
-正式操作以 **後端產生的 action ID** 為識別：確認 → 領取短效執行憑證 → 手機執行 → 回報結果。撥號畫面「已開啟」不等於「電話已接通」；第三方日曆新增畫面「已交接」也不等於「已儲存」。
+重新配對會產生新的裝置，不能自動繼承舊筆記。管理端即使明確把多個裝置加入同一使用者，私人筆記仍依裝置隔離。本版沒有跨裝置共享、資料搬移或帳號合併介面。
 
-詳細路由與驗收見 `docs/backend_v1.md`，此次相容更新見 `docs/backend_v2.md`。API／Agent 測試以本地 mock 模型執行，通過測試不代表你的實際模型與手機已完成整合。
+啟動自動升級 schema，為舊未兌換配對碼加入獨立使用者。已兌換或過期碼仍無效。曾經顯示／被複製的資料無法透過修正收回；不能由目前阻擋測試推論過去未被讀取。細節見 docs/backend_v6.md。
 
-API 啟動後，在另一個終端機、相同 backend 目錄及虛擬環境中執行：
+管理者若有明確需求，可用 create_pairing_code.py --user-id 指定既有使用者，但私人筆記仍鎖定建立裝置。啟動也隔離能辨識來源ID的跨裝置／已刪除筆記快照，停止舊自建筆記待執行操作；沒有來源ID的歷史自由文字不能可靠歸屬，不宣稱已回溯消除所有資料暴露。
+
+## 日常功能
+
+- 文字與語音可共用加密的多輪上下文，後端只採自己已驗證的歷史；最新輸入與原生確認仍是本次操作依據。
+- 通訊錄、撥號、定點鬧鐘、倒數計時器、日曆由已配對 APK 執行。日曆預設 30 分鐘、提前 10 分鐘提醒，仍需要足夠開始日期與時間。
+- 日常筆記預設交給手機記事本：notes.create_native 開啟支援的記事本／文字分享選擇器，使用者在該 App 確認保存。handed_off 不代表已儲存。
+- 不再以 APK 自建加密筆記區冒充手機預設記事本，不默默建立平台副本。純瀏覽器或舊 APK 缺少能力時清楚回報；平台備忘錄可在「其他工具」明確選用。
+- 所有廠牌記事本沒有通用的搜尋／讀取／更新介面。手機記事本查詢或更新會回報限制；平台筆記在明確選用平台後仍可查詢、修改與刪除。
+- POST /v1/audio?purpose=command 接完整 raw 音檔，僅轉錄、不先建立筆記，再送 /v1/chat。purpose=note 是原本的錄音整理模式。外層不是 multipart；後端再依 STT 協定傳送音檔。
+
+舊動作格式的相容處理仍保留，但新 APK 不宣告自建筆記保存／搜尋／更新能力。舊 APK 自建筆記資料保留，不自動遷移到其他記事本。
+
+## 除錯與驗證
+
+/health 不會呼叫模型；先確認本機 http://127.0.0.1:8000/health，再測公開 HTTPS hostname。
+
+PyCharm Console／終端機預設顯示 INFO JSON 事件：audio.received／audio.accepted、stt.started／stt.completed／stt.failed、chat.received、agent.started／agent.completed／agent.failed。每個 HTTP 回覆有 X-Request-ID；音訊工作與聊天可透過 trace／job／request ID 對照。排隊不等於 STT 已開始。
+
+預設不輸出配對碼、token、Cookie、音訊或模型服務原始錯誤；LOG_COMMAND_TEXT=true 才會在本機終端機輸出最多 200 字元的當句指令。正常 GET 輪詢事件是 DEBUG。
 
 ```bash
-python examples/poc_client.py --text "幫我記下明天要帶轉接頭"
+python -m unittest discover -s tests -v
 ```
 
-此程式讀取 `.env` 的管理設定，建立一個暫時裝置，再呼叫你配置的實際模型；最後撤銷測試裝置，不列印憑證。筆記仍保存在同一個 PoC 使用者下。測試 Tunnel 時加入 `--base-url https://你的子網域`。電話或鬧鐘只會建立待執行操作，CLI 不回報模擬成功。
+最終測試與實際設備界線見 STATUS.md；本地 mock 模型通過不代表目標手機、記事本或真實 STT／LLM 已完成驗收。
 
-離線驗證可使用 `python -m unittest discover -s tests -v`。`requirements-tested.txt` 記錄本次 Python 3.12 測試環境的套件版本；它不是 Pi 的硬體／驅動安裝清單。
+本地整合另以有效1秒.m4a檔驗證 raw audio/mp4 → STT multipart recording.m4a → Agent notes.create_native → handed_off，沒有平台副本，trace ID可接續；跨裝置音訊工作／指令／動作／筆記操作遭404。這是固定音檔與mock服務整合，不是目標手機實錄或真實模型測試。
 
-## 6. 長期執行與更新
+## 更新與資料保護
 
-`deploy/pi/local-assistant.service` 提供 systemd 範例。其工作目錄為 `/opt/local-assistant/backend`，使用專用 `localassistant` 帳號；資料路徑請設定為 `/var/lib/local-assistant`，確保該帳號有權讀寫。啟用前先完成虛擬環境與 `.env` 設定。
+差異包不覆蓋 .env、runtime、模型、金鑰或現有 cloudflared。停止後端後備份資料庫與原始 data.key，再覆蓋來源並重啟；金鑰遺失不能重新產生來恢復舊密文。SQLite 備份需包含一致的 WAL 狀態。
 
-更新 ZIP 時，只覆蓋原始碼與文件；`.env`、runtime 資料、模型與金鑰不在更新 ZIP 中。每次先查看 `CHANGELOG.md`、`STATUS.md` 以及 `PACKAGE_MANIFEST.json`。若有 `deleted_paths`，核對後手動移除列出的舊原始碼；封裝工具不自動刪除檔案。
+敏感資料使用 AES-256-GCM 保存，metadata 並非全部加密。網站／手機到 Cloudflare 及 Tunnel 有傳輸加密，但 HTTPS 在 Cloudflare edge 終止，Cloudflare 可處理明文；本版沒有應用層端對端加密或 mTLS。系統記事本與日曆由該 App／帳號依原設定保存與同步，不屬於中樞 AES 範圍。
 
-從 v2 封裝工具起，每個子專案的 manifest 放在各自目錄，例如 `backend/PACKAGE_MANIFEST.json`、`web/PACKAGE_MANIFEST.json`、`android/PACKAGE_MANIFEST.json`，避免三包互相覆蓋版本資訊。初版根目錄 manifest 保留作為舊版紀錄。
-
-手機權限與日曆選擇可能超過原本 120 秒執行期限，建議在既有 `.env` 手動設定 `ACTION_LEASE_SECONDS=600`。更新包不會替你覆蓋 `.env`；超時後仍須查看手機與操作狀態，不自動重做。
-
-首次啟動在 `DATA_DIR` 建立 `assistant.sqlite3` 及 `data.key`；敏感內容使用 AES-256-GCM 加密。金鑰是獨立檔案，預設仍與資料庫在同一資料目錄，並非硬體隔離保管。
-
-**加密金鑰與加密資料需分開備份。** 停止 API 後再備份資料庫與原始 `data.key`，或使用 SQLite 一致性備份流程，避免漏掉 WAL 中的變更。遺失金鑰就無法解密既有筆記；存在資料庫卻缺少金鑰時，程式會停止，不能用重新產生金鑰恢復舊資料。
-
-## 7. 版本記錄
-
-- `CHANGELOG.md`：每版新增與修改。
-- `STATUS.md`：功能完成度、已知限制與未完成項目。
-- `docs/backend_v1.md`：本次對外介接與展示範圍。
+各包 manifest 位於子專案 PACKAGE_MANIFEST.json，若列出 deleted_paths 需核對後手動處理；解壓不會自動刪除舊來源。歷史版本詳見 CHANGELOG.md 與 docs/backend_v1.md 至 docs/backend_v6.md。

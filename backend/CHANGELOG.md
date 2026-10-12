@@ -1,5 +1,15 @@
 # Backend 版本更新記錄
 
+## v6 — 2026-10-12
+
+- 修正舊版所有配對共用poc-user與平台筆記只依user_id授權；新碼預設獨立usr_使用者，所有私人筆記操作鎖定使用者＋原建立裝置。
+- schema1→2保留AES金鑰、原user/device、token、session與筆記；舊未用碼改為獨立伺服器身分。只有bootstrap管理端可明確指定碼的user_id。
+- 啟動隔離可辨識的跨裝置／已刪除筆記快照，停用舊自建筆記待執行動作，避免舊requests/actions/history繼續提供同一快照。
+- 日常phone_first改為notes.create_native交接手機記事本，通用查詢／更新明確unsupported，不默默平台備援，不把handed_off冒稱已保存。
+- 新增POST /v1/notes/native-actions讓STT草稿直接交接，不先建立平台筆記。平台功能明確選用時仍可保存／查詢／更新。
+- 完整.m4a沿用既有raw音訊API與STT，不需要即時音訊串流；上下文、timer與JSON除錯紀錄保留。
+- 全部98項後端測試通過；真實手機、記事本、STT／LLM與部署端仍待驗收。先前已顯示或被複製的資料不能收回。
+
 ## v5 — 2026-10-12
 
 - /chat 支援 conversation_id=new／既有 ID 與 parent_request_id；後端建立加密的 conversations 表、依裝置隔離並串接已保存請求。

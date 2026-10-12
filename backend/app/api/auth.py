@@ -1,23 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from app.api.dependencies import device_principal, principal
-from app.schemas import PairRequest
+from app.schemas import PairingCodeCreate, PairRequest
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
 @router.post("/pairing-codes")
-def create_code(request: Request):
+def create_code(request: Request, body: PairingCodeCreate | None = None):
     request.app.state.rate_limit.check("pairing-admin", limit=20)
     if not request.app.state.auth.verify_admin(request.headers.get("x-bootstrap-token")):
         raise HTTPException(401, detail={"code": "invalid_admin_token", "message": "初始化管理憑證不正確"})
-    return request.app.state.repo.create_pairing_code(ttl_seconds=300)
+    return request.app.state.repo.create_pairing_code(ttl_seconds=300,
+        user_id=body.user_id if body else None)
 
 
 @router.post("/pair")
 def pair(body: PairRequest, request: Request):
     request.app.state.rate_limit.check("pairing", limit=20)
-    return request.app.state.repo.consume_pairing_code(body.code, body.label, request.app.state.settings.default_user_id)
+    return request.app.state.repo.consume_pairing_code(body.code, body.label)
 
 
 @router.post("/session")

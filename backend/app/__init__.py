@@ -1,3 +1,3 @@
 """Local Assistant backend."""
 
-__version__ = "5"
+__version__ = "6"

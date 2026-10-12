@@ -41,7 +41,7 @@ def validate_model_url(url: str, allow_nonlocal: bool = False) -> None:
 class Settings:
     public_base_url: str = "https://assistant.example.com"
     admin_bootstrap_token: str = field(default="", repr=False)
-    default_user_id: str = "poc-user"
+    default_user_id: str = "poc-user"  # Legacy config only; pairing never uses this shared identity.
     data_dir: Path = field(default_factory=lambda: BACKEND_DIR / "runtime")
     web_dir: Path = field(default_factory=lambda: BACKEND_DIR.parent / "web")
     llm_base_url: str = "http://127.0.0.1:11434/v1"

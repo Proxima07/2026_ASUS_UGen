@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE TABLE IF NOT EXISTS pairing_codes (
     code_hash TEXT PRIMARY KEY, expires_at REAL NOT NULL, created_at REAL NOT NULL,
-    consumed_at REAL
+    consumed_at REAL, user_id TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS requests (
     request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL REFERENCES devices(device_id),
@@ -53,9 +54,10 @@ CREATE TABLE IF NOT EXISTS conversations (
     created_at REAL NOT NULL, updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notes_user_created ON notes(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_device_created ON notes(user_id, device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_actions_device_created ON actions(device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requests_device_created ON requests(device_id, created_at DESC);
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 """
 
 
@@ -69,8 +71,17 @@ class Database:
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise RuntimeError("Unsupported database schema version.")
+            # Existing encrypted rows retain their user identity (AES-GCM AAD).
+            # Only unused pairing credentials need a newly isolated owner.
+            columns = connection.execute("PRAGMA table_info(pairing_codes)").fetchall()
+            if columns and "user_id" not in {row["name"] for row in columns}:
+                connection.execute("ALTER TABLE pairing_codes ADD COLUMN user_id TEXT")
+            if columns:
+                for row in connection.execute("SELECT code_hash FROM pairing_codes WHERE user_id IS NULL").fetchall():
+                    connection.execute("UPDATE pairing_codes SET user_id=? WHERE code_hash=?",
+                        ("usr_" + uuid.uuid4().hex, row["code_hash"]))
             connection.executescript(SCHEMA)
         if os.name == "posix":
             self.path.chmod(0o600)

@@ -17,9 +17,15 @@ class PairRequest(StrictModel):
     label: str = Field(min_length=1, max_length=100)
 
 
+class PairingCodeCreate(StrictModel):
+    # Only the bootstrap-authenticated administrator can deliberately associate
+    # a new device with an existing user. Private notes remain device-owned.
+    user_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 NativeCapability = Literal[
     "contacts.search", "phone.dial", "alarm.create", "timer.create", "calendar.create",
-    "notes.save_local", "notes.share", "notes.search_local", "notes.update_local",
+    "notes.create_native", "notes.save_local", "notes.share", "notes.search_local", "notes.update_local",
 ]
 
 
@@ -27,7 +33,7 @@ class ChatRequest(StrictModel):
     text: str = Field(min_length=1, max_length=8000)
     timezone: str = "Asia/Taipei"
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
-    note_target: Literal["platform", "phone_first"] = "platform"
+    note_target: Literal["platform", "phone_first"] = "phone_first"
     # Hints choose routing only. They do not authenticate or grant device access.
     native_capabilities: list[NativeCapability] = Field(default_factory=list, max_length=20)
     source_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
@@ -69,7 +75,7 @@ class NoteUpdate(StrictModel):
 
 
 class NoteActionCreate(StrictModel):
-    kind: Literal["notes.save_local", "notes.share"]
+    kind: Literal["notes.create_native", "notes.save_local", "notes.share"]
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
 
 
@@ -154,7 +160,6 @@ TOOL_ARGS: dict[str, type[BaseModel]] = {
     "notes.create": NoteCreate,
     "notes.search": NoteSearchArgs,
     "notes.update": NoteUpdateArgs,
-    "notes.save_local": NoteReferenceArgs,
     "notes.share": NoteReferenceArgs,
 }
 
@@ -230,12 +235,111 @@ class BridgeHello(StrictModel):
     type: Literal["hello"] = "hello"
 
 
+class BridgeIdentity(StrictModel):
+    user_id: str = Field(min_length=1, max_length=200)
+    device_id: str = Field(pattern=r"^dev_[0-9a-f]{32}$")
+
+
+class BridgeRecordingInfo(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    format: Literal["audio/mp4"] = "audio/mp4"
+    max_duration_ms: Literal[180000] = 180000
+    max_bytes: Literal[8388608] = 8388608
+
+
 class BridgeReady(StrictModel):
     protocol_version: Literal["1"] = "1"
     message_id: str = Field(min_length=1, max_length=128)
     type: Literal["ready"] = "ready"
     capabilities: list[str] = Field(default_factory=list, max_length=20)
     uncertain_actions: int = Field(default=0, ge=0)
+    recording: BridgeRecordingInfo | None = None
+    identity: BridgeIdentity | None = None
+    device_id: str | None = Field(default=None, pattern=r"^dev_[0-9a-f]{32}$")
+
+
+class BridgeRecordingStart(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_start"] = "recording_start"
+    purpose: Literal["command"] = "command"
+    expected_user_id: str = Field(min_length=1, max_length=200)
+    expected_device_id: str = Field(pattern=r"^dev_[0-9a-f]{32}$")
+
+
+class BridgeRecordingStop(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_stop"] = "recording_stop"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+
+
+class BridgeRecordingCancel(StrictModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"anyOf": [
+        {"required": ["recording_id"], "properties": {"recording_id": {"type": "string"}}},
+        {"required": ["start_message_id"], "properties": {"start_message_id": {"type": "string"}}},
+    ]})
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_cancel"] = "recording_cancel"
+    recording_id: str | None = Field(default=None, pattern=r"^rec_[0-9a-f]{32}$")
+    start_message_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def cancellation_target(self):
+        if self.recording_id is None and self.start_message_id is None:
+            raise ValueError("需要 recording_id 或 start_message_id 以取消指定錄音")
+        return self
+
+
+class BridgeRecordingStarted(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_started"] = "recording_started"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+    format: Literal["audio/mp4"] = "audio/mp4"
+
+
+class BridgeRecordingProgress(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_progress"] = "recording_progress"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+    elapsed_ms: int = Field(strict=True, ge=0, le=180000)
+    level: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class BridgeRecordingStopping(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_stopping"] = "recording_stopping"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+
+
+class BridgeRecordingUploading(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_uploading"] = "recording_uploading"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+
+
+class BridgeRecordingUploaded(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_uploaded"] = "recording_uploaded"
+    recording_id: str = Field(pattern=r"^rec_[0-9a-f]{32}$")
+    job_id: str = Field(pattern=r"^job_[0-9a-f]{32}$")
+    trace_id: str = Field(pattern=r"^http_[0-9a-f]{32}$")
+    status: Literal["queued"] = "queued"
+    purpose: Literal["command"] = "command"
+
+
+class BridgeRecordingCancelled(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    message_id: str = Field(min_length=1, max_length=128)
+    type: Literal["recording_cancelled"] = "recording_cancelled"
+    recording_id: str | None = Field(default=None, pattern=r"^rec_[0-9a-f]{32}$")
+    reason: Literal["user", "background", "navigation", "limit", "not_active"]
 
 
 class BridgeActionResult(StrictModel):
@@ -270,6 +374,10 @@ class BridgeError(StrictModel):
     message_id: str = Field(default="", max_length=128)
     type: Literal["error"] = "error"
     error: BridgeErrorDetail
+    recording_id: str | None = Field(default=None, pattern=r"^rec_[0-9a-f]{32}$")
 
 
-BridgeProtocol = Annotated[BridgeMessage | BridgeHello | BridgeReady | BridgeActionResult | BridgeLogout | BridgeLoggedOut | BridgeError, Field(discriminator="type")]
+BridgeProtocol = Annotated[BridgeMessage | BridgeHello | BridgeReady | BridgeActionResult | BridgeLogout | BridgeLoggedOut | BridgeError
+    | BridgeRecordingStart | BridgeRecordingStop | BridgeRecordingCancel | BridgeRecordingStarted | BridgeRecordingProgress
+    | BridgeRecordingStopping | BridgeRecordingUploading | BridgeRecordingUploaded | BridgeRecordingCancelled,
+    Field(discriminator="type")]

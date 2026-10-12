@@ -77,7 +77,7 @@ class ObservabilityTests(unittest.TestCase):
                 self.assertEqual([],calls)
                 release.set();job=self.poll(client,headers,accepted["job_id"])
                 self.assertEqual("transcribed",job["status"])
-                body={"text":job["transcript"].strip(),"source_job_id":job["job_id"],"idempotency_key":"one-voice"}
+                body={"text":job["transcript"].strip(),"source_job_id":job["job_id"],"idempotency_key":"one-voice","note_target":"platform"}
                 first=client.post("/v1/chat",headers=headers,json=body)
                 second=client.post("/v1/chat",headers=headers,json=body)
                 self.assertEqual(200,first.status_code,first.text)

@@ -79,7 +79,7 @@ class StorageSecurityTests(unittest.TestCase):
 
     def test_ownership_user_notes_and_device_actions(self):
         note = self.repo.create_note(self.principal, "我的筆記", "內容")
-        self.assertEqual(note, self.repo.get_note(self.other_device, note["note_id"]))
+        self.assertRepositoryError("not_found", self.repo.get_note, self.other_device, note["note_id"])
         self.assertRepositoryError("not_found", self.repo.get_note, self.other_user, note["note_id"])
         action = self.repo.create_action(self.principal, "set_alarm", {"hour": 7})
         self.assertRepositoryError("not_found", self.repo.get_action, self.other_device, action["action_id"])
@@ -94,7 +94,7 @@ class StorageSecurityTests(unittest.TestCase):
 
         def consume(_):
             try:
-                return self.repo.consume_pairing_code(pairing["code"], "手機", "alice")
+                return self.repo.consume_pairing_code(pairing["code"], "手機")
             except RepositoryError as error:
                 return error.code
 
@@ -201,7 +201,9 @@ class StorageSecurityTests(unittest.TestCase):
 
     def test_note_update_preserves_identity_encrypts_content_and_checks_owner(self):
         note = self.repo.create_note(self.principal, "原始標題", "原始內容", transcript="原始逐字稿")
-        updated = self.repo.update_note(self.other_device, note["note_id"], "新的私人標題", "新的私人內容", "新的私人逐字稿")
+        self.assertRepositoryError("not_found", self.repo.update_note,
+                                   self.other_device, note["note_id"], "冒名修改", "不應寫入")
+        updated = self.repo.update_note(self.principal, note["note_id"], "新的私人標題", "新的私人內容", "新的私人逐字稿")
         self.assertEqual(note["note_id"], updated["note_id"])
         self.assertEqual(note["created_at"], updated["created_at"])
         self.assertGreaterEqual(updated["updated_at"], note["updated_at"])

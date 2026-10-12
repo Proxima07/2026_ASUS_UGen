@@ -1,8 +1,8 @@
-// @web-revision: web-v6
-import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js?rev=web-v6';
-import {uncertainResponse} from './conversation.js?rev=web-v6';
+// @web-revision: web-v7
+import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js?rev=web-v7';
+import {uncertainResponse} from './conversation.js?rev=web-v7';
 export class Chat {
-  constructor({api,actions,conversations=null,authenticated=()=>false,onNotesChanged=()=>{},toast=()=>{}}){this.api=api;this.actions=actions;this.conversations=conversations;this.reservation=null;this.authenticated=authenticated;this.onNotesChanged=onNotesChanged;this.toast=toast;this.pending=null;this.busy=false;this.generation=0;this.replies=new Map();this.lastNotes=new Set();this.form=document.querySelector('#chat-form');this.input=document.querySelector('#chat-input');this.send=document.querySelector('#chat-send');this.hint=document.querySelector('#chat-hint');this.conversation=document.querySelector('#conversation');this.empty=document.querySelector('#conversation-empty');this.form.addEventListener('submit',e=>{e.preventDefault();this.submit();});this.input.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();this.submit();}});for(const button of document.querySelectorAll('[data-prompt]'))button.addEventListener('click',()=>this.fill(button.dataset.prompt));}
+  constructor({api,bridge=null,actions,conversations=null,authenticated=()=>false,onNotesChanged=()=>{},toast=()=>{}}){this.api=api;this.bridge=bridge;this.actions=actions;this.conversations=conversations;this.reservation=null;this.authenticated=authenticated;this.onNotesChanged=onNotesChanged;this.toast=toast;this.pending=null;this.busy=false;this.generation=0;this.replies=new Map();this.lastNotes=new Set();this.form=document.querySelector('#chat-form');this.input=document.querySelector('#chat-input');this.send=document.querySelector('#chat-send');this.hint=document.querySelector('#chat-hint');this.conversation=document.querySelector('#conversation');this.empty=document.querySelector('#conversation-empty');this.form.addEventListener('submit',e=>{e.preventDefault();this.submit();});this.input.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();this.submit();}});for(const button of document.querySelectorAll('[data-prompt]'))button.addEventListener('click',()=>this.fill(button.dataset.prompt));}
   fill(text){this.input.value=text;this.input.focus();}
   bubble(role,text){this.empty.hidden=true;const node=element('article',`message message-${role}`);node.append(element('span','message-label',role==='user'?'你':'留白'));const body=element('p','message-body',text);node.append(body);this.conversation.append(node);return body;}
   async submit(){
@@ -21,7 +21,7 @@ export class Chat {
     this.pending=attempt;const generation=this.generation;
     this.busy=true;this.send.disabled=true;this.input.disabled=true;this.send.textContent='處理中';setMessage(this.hint,'由私人中樞理解指令…');
     try{
-      const record=await this.api.chat(text,attempt.key,{timezone:attempt.timezone,conversationId:token?.conversationId,parentRequestId:token?.parentRequestId});
+      const record=await this.api.chat(text,attempt.key,{noteTarget:'phone_first',nativeCapabilities:this.bridge?.ready?[...this.bridge.capabilities]:[],timezone:attempt.timezone,conversationId:token?.conversationId,parentRequestId:token?.parentRequestId});
       if(generation!==this.generation||(this.conversations&&!this.conversations.active(token)))return;
       if(this.conversations&&!this.conversations.adopt(token,record))throw new Error('無法核對這次對話編號，請按「新對話」重新開始。');
       this.replies.set(record.request_id,attempt.reply);this.pending=null;this.input.value='';this.update(record);

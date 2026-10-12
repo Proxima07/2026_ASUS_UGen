@@ -5,14 +5,18 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.Call
+import okhttp3.Response
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class NativeApiClient(val origin: String, private val token: String? = null) {
     private val base = validateOrigin(origin).toHttpUrl()
     private val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS).callTimeout(60, TimeUnit.SECONDS)
-        .followRedirects(false).followSslRedirects(false).build()
+        .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     fun call(method: String, path: String, body: JSONObject? = null): Pair<JSONObject, List<String>> {
         require((path.startsWith("/v1/") || method == "GET" && path == "/health") && !path.contains("?") && !path.contains("#"))
@@ -20,7 +24,10 @@ class NativeApiClient(val origin: String, private val token: String? = null) {
         val builder = Request.Builder().url(url).header("Accept", "application/json")
         if (token != null && path != "/health") builder.header("Authorization", "Bearer $token")
         builder.method(method, if (method == "GET") null else (body ?: JSONObject()).toString().toRequestBody(jsonType))
-        http.newCall(builder.build()).execute().use { response ->
+        return decode(http.newCall(builder.build()).execute())
+    }
+    private fun decode(response: Response): Pair<JSONObject, List<String>> {
+        response.use {
             val source = response.body?.source()
             source?.request(2097153)
             if ((source?.buffer?.size ?: 0L) > 2097152)
@@ -38,6 +45,23 @@ class NativeApiClient(val origin: String, private val token: String? = null) {
             return Pair(parsed, response.headers.values("Set-Cookie"))
         }
     }
+    /** Complete local file only: never a JS-supplied URL, path or unbounded base64 body. */
+    fun commandAudioUpload(file: File): Call {
+        require(token != null && file.isFile && file.length() in 1..8_388_608L)
+        val url = base.newBuilder().encodedPath("/v1/audio").addQueryParameter("purpose", "command").build()
+        val request = Request.Builder().url(url).header("Accept", "application/json")
+            .header("Authorization", "Bearer $token").post(file.asRequestBody("audio/mp4".toMediaType())).build()
+        return http.newCall(request)
+    }
+    fun executeAudioUpload(call: Call): JSONObject = decode(call.execute()).first
+    fun identityCall(): Call {
+        require(token != null)
+        val request = Request.Builder().url(base.newBuilder().encodedPath("/v1/auth/me").build())
+            .header("Accept", "application/json").header("Authorization", "Bearer $token").get().build()
+        return http.newBuilder().callTimeout(15, TimeUnit.SECONDS).build().newCall(request)
+    }
+    fun executeIdentity(call: Call): JSONObject = decode(call.execute()).first
+    fun me() = executeIdentity(identityCall())
     fun getAction(actionId: String) = call("GET", "/v1/actions/${safeId(actionId)}").first
     fun confirm(actionId: String) = call("POST", "/v1/actions/${safeId(actionId)}/confirm").first
     fun cancel(actionId: String) = call("POST", "/v1/actions/${safeId(actionId)}/cancel").first

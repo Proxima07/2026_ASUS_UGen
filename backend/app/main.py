@@ -97,6 +97,9 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
         event(app.state, "backend.starting", component="backend", version=__version__, port=cfg.port)
         app.state.database = Database(cfg.data_dir / "assistant.sqlite3", cfg.data_dir / "data.key")
         app.state.repo = Repository(app.state.database)
+        quarantined = app.state.repo.quarantine_legacy_note_snapshots()
+        if quarantined:
+            event(app.state, "privacy.legacy_notes_quarantined", code="legacy_note_snapshot_quarantined", records=quarantined)
         app.state.auth = Authenticator(app.state.repo, cfg.admin_bootstrap_token)
         app.state.llm = LLMClient(cfg, transport=llm_transport)
         app.state.stt = STTClient(cfg, transport=stt_transport)

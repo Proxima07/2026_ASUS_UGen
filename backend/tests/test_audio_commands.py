@@ -111,23 +111,22 @@ class CommandAudioAPITests(unittest.TestCase):
                 auth = {"Authorization": "Bearer " + device["token"]}
                 command = {"text": job["transcript"], "timezone": "Asia/Taipei",
                     "idempotency_key": "voice-pipeline-one", "note_target": "phone_first",
-                    "native_capabilities": ["notes.save_local"]}
+                    "native_capabilities": ["notes.create_native"]}
                 planned = client.post("/v1/chat", headers=auth, json=command)
                 self.assertEqual(planned.status_code, 200, planned.text)
                 request_id = planned.json()["request_id"]
                 action_id = planned.json()["action_id"]
                 action = client.get("/v1/actions/" + action_id, headers=auth).json()
-                self.assertEqual(action["kind"], "notes.save_local")
+                self.assertEqual(action["kind"], "notes.create_native")
                 self.assertEqual(action["request_id"], request_id)
                 self.assertEqual(client.get("/v1/notes", headers=auth).json()["items"], [])
                 claimed = client.post("/v1/actions/" + action_id + "/confirm", headers=auth).json()
                 result = client.post("/v1/actions/" + action_id + "/result", headers=auth,
-                    json={"execution_token": claimed["execution_token"], "state": "completed",
-                          "result": {"note_id": action["payload"]["note_id"]}})
+                    json={"execution_token": claimed["execution_token"], "state": "handed_off", "result": {}})
                 self.assertEqual(result.status_code, 200, result.text)
                 finished = client.get("/v1/requests/" + request_id, headers=auth).json()
-                self.assertEqual(finished["status"], "completed")
-                self.assertEqual(finished["storage_target"], "phone")
+                self.assertEqual(finished["status"], "handed_off")
+                self.assertEqual(finished["storage_target"], "phone_app")
                 self.assertFalse(finished["fallback"])
                 self.assertEqual(client.get("/v1/notes", headers=auth).json()["items"], [])
                 self.assertEqual(client.post("/v1/chat", headers=auth, json=command).json()["request_id"], request_id)

@@ -70,7 +70,7 @@ async def chat(body: ChatRequest, request: Request, identity=Depends(principal))
     if len(body.text) > state.settings.max_text_chars:
         raise HTTPException(413, detail={"code": "text_too_large", "message": "文字超過設定上限"})
     context = {"timezone": body.timezone}
-    if body.note_target != "platform" or body.native_capabilities:
+    if "note_target" in body.model_fields_set or body.native_capabilities:
         context.update(note_target=body.note_target, native_capabilities=body.native_capabilities)
     if body.source_job_id:
         source_job = state.repo.get_job(identity, body.source_job_id)

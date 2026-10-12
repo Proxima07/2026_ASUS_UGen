@@ -1,5 +1,15 @@
 # 網頁更新紀錄
 
+## web_v7 — 2026-10-12
+
+- APK語音首頁優先使用原生檔案錄音，綁定ready身分／recordingID；原生上傳後僅收job/trace回覆，接既有STT／Agent。
+- 錄音開始才顯示收聽中與經過時間，紅色主麥克風／停止及紅色取消；等待與收尾可取消，錯誤／逾時不留錄音鎖。
+- Chrome保留MediaRecorder完整Blob；15秒權限期限、取消與遲到stream清理，不需要STT串流。
+- 身分變化／登出清除私人UI與API請求epoch，舊回覆不能恢復前一使用者的筆記。
+- 手機記事本只用notes.create_native與真實handed_off，移除自建筆記能力；純瀏覽器不默默平台保存。
+- STT草稿預設明確開啟手機記事本，另提供「保存到平台筆記」，平台列表標示平台位置。
+- 更新web-v7全部runtime標記與載入檢查；全部127項Node測試通過。測試與未實機驗收範圍見STATUS.md。
+
 ## web_v6 — 2026-10-12
 
 - 新增頁面共用 ConversationCoordinator；文字與語音使用後端 conversation_id／parent_request_id，追問後可直接補條件。

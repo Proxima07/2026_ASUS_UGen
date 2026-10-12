@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Native confirmation uses actual server-fetched parameters, never a web supplied summary. */
 object NativeConfirmation {
+    private val dialogs = mutableMapOf<Activity, AlertDialog>()
+    fun cancelForActivity(activity: Activity) { dialogs.remove(activity)?.cancel() }
     fun show(activity: Activity, kind: String, payload: JSONObject, callback: (Boolean) -> Unit) {
         showDetailed(activity, kind, payload, "", callback)
     }
@@ -34,10 +36,14 @@ object NativeConfirmation {
         val scroll = ScrollView(activity).apply { addView(text) }
         val answered = AtomicBoolean(false)
         fun answer(value: Boolean) { if (answered.compareAndSet(false, true)) callback(value) }
-        AlertDialog.Builder(activity).setTitle("確認手機操作").setView(scroll)
+        val dialog = AlertDialog.Builder(activity).setTitle("確認手機操作").setView(scroll)
             .setPositiveButton("確認") { _, _ -> answer(true) }
             .setNegativeButton("取消") { _, _ -> answer(false) }
-            .setOnCancelListener { answer(false) }.show()
+            .setOnCancelListener { answer(false) }.create()
+        cancelForActivity(activity)
+        dialogs[activity] = dialog
+        dialog.setOnDismissListener { if (dialogs[activity] === dialog) dialogs.remove(activity) }
+        dialog.show()
     }
 
     fun describe(kind: String, payload: JSONObject): String = when (kind) {
@@ -62,25 +68,7 @@ object NativeConfirmation {
             val defaultsDetails = if (defaultsNotice.isBlank()) "" else "\n\n預設設定：$defaultsNotice"
             "事件：${payload.getString("title")}\n開始：${formatDate(payload.getString("start"))}\n結束：${formatDate(payload.getString("end"))}\n地點：${payload.optString("location")}\n提醒：開始前 ${payload.optInt("reminder_minutes", 10)} 分鐘\n說明：${payload.optString("description")}$defaultsDetails"
         }
-        "notes.save_local" -> "保存到這個 App 的加密筆記\n\n${payload.getString("title")}\n\n${payload.getString("content")}"
-        "notes.search_local" -> {
-            val purpose = payload.optString("purpose", "lookup")
-            require(purpose in setOf("lookup", "update"))
-            "搜尋這個 App 的加密筆記：${payload.getString("query")}\n用途：${if (purpose == "update") "找出要修改的筆記" else "查詢筆記"}\n只將最多 20 筆筆記的識別碼、標題與前 300 字元摘要傳回已配對中樞。完整筆記仍保留在手機。"
-        }
-        "notes.update_local" -> {
-            val mode = payload.getString("mode")
-            require(mode in setOf("replace", "append"))
-            val currentTitle = if (!payload.has("current_title") || payload.isNull("current_title")) ""
-                else payload.getString("current_title").take(200)
-            val currentPreview = if (!payload.has("current_preview") || payload.isNull("current_preview")) ""
-                else payload.getString("current_preview").take(300)
-            val target = if (currentTitle.isBlank()) "筆記識別碼：${payload.getString("note_id")}" else "要修改的筆記：$currentTitle"
-            val preview = if (currentPreview.isBlank()) "" else "\n目前內容（預覽）：\n$currentPreview\n"
-            val rename = if (!payload.has("title") || payload.isNull("title")) "標題：維持原標題"
-                else "新標題：${payload.getString("title")}"
-            "修改這個 App 的加密筆記\n$target$preview\n$rename\n方式：${if (mode == "append") "在原內容後換行追加" else "以以下內容取代原內容"}\n\n${payload.getString("content")}\n\n只修改既有筆記；若找不到，不會建立新筆記。"
-        }
+        "notes.create_native" -> "新增到手機記事本 App\n\n${payload.getString("title")}\n\n${payload.getString("content")}\n\n將開啟支援的記事本；若不支援，請在分享介面選擇你的記事本。必須在記事本內確認保存，本助理不能讀取或直接修改其他 App 的既有記事。"
         "notes.share" -> "把以下內容交給你選擇的 App：\n\n${payload.getString("title")}\n\n${payload.getString("content")}\n\n接收 App 是否保存，需由你在該 App 確認。"
         else -> throw IllegalArgumentException("Unsupported action")
     }

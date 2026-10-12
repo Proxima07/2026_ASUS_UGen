@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#0c635d">
   <meta name="description" content="由私人設備處理的個人助理。對話、筆記與錄音整理。">
   <title>留白 · 個人助理</title>
-  <link rel="icon" href="/assets/mark.svg?rev=web-v6" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/app.css?rev=web-v6">
-  <meta name="web-revision" content="web-v6">
-  <script type="module" src="/js/bootstrap.js?rev=web-v6"></script>
+  <link rel="icon" href="/assets/mark.svg?rev=web-v7" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css?rev=web-v7">
+  <meta name="web-revision" content="web-v7">
+  <script type="module" src="/js/bootstrap.js?rev=web-v7"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v6" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
+      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v7" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
       <div class="header-links"><button id="new-conversation" class="quiet-button" type="button" aria-label="開始新對話，保留已保存的筆記">新對話</button><button id="tools-toggle" class="quiet-button" type="button" aria-controls="tools-navigation" aria-expanded="false">其他工具</button><button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線</button></div>
     </header>
     <details id="account-panel" class="account-panel card"><summary id="account-summary">連線設定</summary>
@@ -31,18 +31,18 @@
       <button id="logout-button" class="secondary-button" type="button" hidden>登出網頁</button>
       <p id="pair-message" class="form-message" role="status"></p>
     </details>
-    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v6">重新載入介面</a></section>
+    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v7">重新載入介面</a></section>
     <div id="connection-warning" class="notice" role="status" hidden>尚未連線。請先完成配對。</div>
     <nav id="tools-navigation" class="tabs" aria-label="其他工具" hidden>
       <button id="tab-voice" class="tab active" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="true">語音首頁</button>
       <button id="tab-chat" class="tab" type="button" data-tab="chat" aria-controls="panel-chat" aria-selected="false">文字</button>
-      <button id="tab-notes" class="tab" type="button" data-tab="notes" aria-controls="panel-notes" aria-selected="false">筆記</button>
+      <button id="tab-notes" class="tab" type="button" data-tab="notes" aria-controls="panel-notes" aria-selected="false">平台筆記</button>
       <button id="tab-audio" class="tab" type="button" data-tab="audio" aria-controls="panel-audio" aria-selected="false">錄音整理</button>
     </nav>
     <fieldset id="app-control-lock" class="control-lock" disabled><main>
       <section id="panel-voice" class="voice-home tab-panel" aria-labelledby="voice-title">
         <div class="voice-intro"><p class="eyebrow">日常，交給我就好</p><h1 id="voice-title">我在，說吧。</h1><p class="muted">想記下一件事，還是安排今天的生活？</p></div>
-        <div class="voice-control"><button id="voice-mic" class="voice-mic" type="button" aria-label="開始語音指令" aria-pressed="false"><svg class="voice-icon" width="52" height="52" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="24" y="8" width="16" height="31" rx="8" stroke="white" stroke-width="3"/><path d="M16 29v3a16 16 0 0 0 32 0v-3M32 48v8M24 56h16" stroke="white" stroke-width="3" stroke-linecap="round"/></svg><span class="voice-stop-mark" aria-hidden="true"></span></button><p id="voice-mic-label">點一下，說說你想做的事</p><p id="voice-time" class="voice-time" aria-label="錄音時間">00:00</p><div id="voice-meter-wrap" class="voice-meter-wrap" hidden><label for="voice-level">麥克風音量</label><meter id="voice-level" min="0" max="1" value="0">音量</meter></div><div class="voice-record-controls"><button id="voice-stop" class="primary-button" type="button" hidden>結束錄音並送出</button><button id="voice-cancel" class="quiet-button" type="button" hidden>取消錄音</button></div></div>
+        <div class="voice-control"><button id="voice-mic" class="voice-mic" type="button" aria-label="開始語音指令" aria-pressed="false"><svg class="voice-icon" width="52" height="52" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="24" y="8" width="16" height="31" rx="8" stroke="white" stroke-width="3"/><path d="M16 29v3a16 16 0 0 0 32 0v-3M32 48v8M24 56h16" stroke="white" stroke-width="3" stroke-linecap="round"/></svg><span class="voice-stop-mark" aria-hidden="true"></span></button><p id="voice-mic-label">點一下，說說你想做的事</p><p id="voice-time" class="voice-time" aria-label="錄音時間">00:00</p><div id="voice-meter-wrap" class="voice-meter-wrap" hidden><label for="voice-level">麥克風音量</label><meter id="voice-level" min="0" max="1" value="0">音量</meter></div><div class="voice-record-controls"><button id="voice-stop" class="danger-button capture-stop" type="button" hidden>結束錄音並送出</button><button id="voice-cancel" class="danger-button capture-cancel" type="button" hidden>取消錄音</button></div></div>
         <p id="voice-stage" class="voice-stage" role="status">準備好</p><p id="voice-status" class="voice-status" role="status" aria-live="polite">說完停頓一下，我會理解並處理。</p>
         <div class="voice-messages"><section id="voice-transcript-wrap" class="voice-transcript-block" hidden><p class="voice-message-label">你說</p><p id="voice-transcript"></p></section><section id="voice-reply-wrap" class="voice-response-block" hidden><p class="voice-message-label">留白</p><p id="voice-reply"></p></section><div id="voice-choices" class="voice-choices" aria-label="選擇符合的對象"></div></div>
         <details id="voice-debug" class="voice-debug" hidden><summary>本次處理資訊</summary><dl><dt>目前階段</dt><dd id="voice-debug-stage">尚未開始</dd><dt>流程追蹤 ID</dt><dd id="voice-debug-trace">尚未取得</dd><dt>音訊 HTTP ID</dt><dd id="voice-debug-audio_http">尚未取得</dd><dt>指令 HTTP ID</dt><dd id="voice-debug-chat_http">尚未取得</dd><dt>錯誤 HTTP ID</dt><dd id="voice-debug-error_http">尚未取得</dd><dt>錄音工作 ID</dt><dd id="voice-debug-job">尚未取得</dd><dt>Agent 請求 ID</dt><dd id="voice-debug-request">尚未取得</dd><dt>對話 ID</dt><dd id="voice-debug-conversation">尚未取得</dd><dt>前次請求 ID</dt><dd id="voice-debug-parent">尚未取得</dd><dt>處理順序</dt><dd id="voice-debug-history">尚未開始</dd></dl></details><p class="voice-footnote">語音與理解在你的私人設備處理。手機實際操作仍由你確認。</p>
@@ -60,19 +60,19 @@
         </form>
       </section>
       <section id="panel-notes" class="tab-panel" aria-labelledby="tab-notes" hidden>
-        <div class="section-heading"><div><p class="eyebrow">值得留下的日常</p><h1>我的筆記</h1></div><button id="note-new" class="primary-button" type="button">新增筆記</button></div>
-        <label class="visually-hidden" for="notes-search">搜尋筆記</label><input id="notes-search" class="search-input" type="search" placeholder="搜尋標題或內容" autocomplete="off">
+        <div class="section-heading"><div><p class="eyebrow">值得留下的日常</p><h1>平台筆記</h1></div><button id="note-new" class="primary-button" type="button">新增筆記</button></div>
+        <p class="small muted">這裡只列出你明確保存到平台的筆記，不會讀取手機內建記事本。語音記筆記會優先開啟手機記事本，請在手機確認儲存。</p><label class="visually-hidden" for="notes-search">搜尋筆記</label><input id="notes-search" class="search-input" type="search" placeholder="搜尋標題或內容" autocomplete="off">
         <p id="notes-message" class="form-message" role="status"></p>
         <div id="notes-list" class="notes-list"></div>
         <section id="note-editor" class="card note-editor" hidden>
           <div class="section-heading"><h2 id="note-editor-heading">新增筆記</h2><button id="note-editor-close" class="quiet-button" type="button">關閉</button></div>
-          <form id="note-form"><label for="note-title">標題</label><input id="note-title" maxlength="200" required><label for="note-content">內容</label><textarea id="note-content" rows="8" maxlength="16000" required></textarea><details id="note-transcript-container" hidden><summary>原始逐字稿</summary><textarea id="note-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="note-save" class="primary-button" type="submit">保存筆記</button><button id="note-delete" class="danger-button" type="button" hidden>刪除</button></div><p id="note-editor-message" class="form-message" role="status"></p></form>
+          <form id="note-form"><label for="note-title">標題</label><input id="note-title" maxlength="200" required><label for="note-content">內容</label><textarea id="note-content" rows="8" maxlength="16000" required></textarea><details id="note-transcript-container" hidden><summary>原始逐字稿</summary><textarea id="note-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="note-save" class="primary-button" type="submit">保存到平台筆記</button><button id="note-delete" class="danger-button" type="button" hidden>刪除</button></div><p id="note-editor-message" class="form-message" role="status"></p></form>
         </section>
       </section>
       <section id="panel-audio" class="tab-panel" aria-labelledby="tab-audio" hidden>
         <div class="section-intro"><p class="eyebrow">說過的話，也能留下</p><h1>錄音整理</h1><p class="muted">錄下想法，交給私人設備轉錄與整理。確認後才保存為筆記。</p></div>
         <section class="record-card card"><div id="record-indicator" class="record-indicator" aria-hidden="true"><span></span></div><p id="record-status" class="record-status" role="status">準備好時，就按下錄音。</p><p id="record-time" class="record-time">00:00</p><div class="button-row centered"><button id="record-start" class="primary-button" type="button">開始錄音</button><button id="record-stop" class="danger-button" type="button" disabled>停止錄音</button></div><div class="audio-import"><label for="audio-file" class="quiet-button">或選擇既有音檔</label><input id="audio-file" type="file" accept="audio/*,.webm,.wav,.mp3,.m4a,.ogg,.aac,.flac"><p class="small muted">單次最多 10 MiB，建議以 3 分鐘內的短錄音展示。</p></div><audio id="record-playback" controls preload="metadata" hidden></audio><button id="audio-upload" class="secondary-button" type="button" hidden>轉錄並整理</button><p id="audio-message" class="form-message" role="status"></p></section>
-        <section id="audio-result" class="card" hidden><div class="section-heading"><h2>確認這次的筆記</h2><span id="audio-job-status" class="status-pill"></span></div><form id="audio-note-form"><label for="audio-note-title">標題</label><input id="audio-note-title" maxlength="200" required><label for="audio-note-content">筆記內容</label><textarea id="audio-note-content" rows="7" maxlength="16000" required></textarea><details open><summary>逐字稿 · 可以修正</summary><textarea id="audio-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="audio-note-save" class="primary-button" type="submit">保存到筆記</button><button id="transcript-to-chat" class="secondary-button" type="button">帶入對話</button></div><p id="audio-save-message" class="form-message" role="status"></p></form></section>
+        <section id="audio-result" class="card" hidden><div class="section-heading"><h2>確認這次的筆記</h2><span id="audio-job-status" class="status-pill"></span></div><form id="audio-note-form"><label for="audio-note-title">標題</label><input id="audio-note-title" maxlength="200" required><label for="audio-note-content">筆記內容</label><textarea id="audio-note-content" rows="7" maxlength="16000" required></textarea><details open><summary>逐字稿 · 可以修正</summary><textarea id="audio-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="audio-note-save" class="primary-button" type="submit">開啟手機記事本</button><button id="audio-note-platform-save" class="quiet-button" type="button">保存到平台筆記</button><button id="transcript-to-chat" class="secondary-button" type="button">帶入對話</button></div><p id="audio-save-message" class="form-message" role="status"></p></form></section>
       </section>
     </main></fieldset>
     <footer class="app-footer"><span>你掌控的設備，理解你留下的日常。</span><button id="footer-settings" class="quiet-button" type="button">連線設定</button></footer>
