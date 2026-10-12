@@ -1,8 +1,8 @@
-// @web-revision: web-v9
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v9';
-import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v9';
-import {uncertainResponse} from './conversation.js?rev=web-v9';
-export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v9';
+// @web-revision: web-v10
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v10';
+import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v10';
+import {uncertainResponse} from './conversation.js?rev=web-v10';
+export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v10';
 
 const VOICE_BUSY=new Set(['requesting','recording','stopping','uploading','received_audio','queued','transcribing','transcribed','sending','received_request','understanding','dispatching','waiting','reading_result','sending_selection','selecting']);
 const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.create_native','notes.share']);
@@ -28,7 +28,9 @@ export class SilenceGate {
 // The workflow is independent of UI/capture. It never reads action listings and
 // only permits native operations tied to this page's explicit foreground run.
 export class VoiceFlow {
-  constructor({api,bridge,conversations=null,isAuthorized=()=>false,isForeground=()=>true,onState=()=>{},onTranscript=()=>{},onRecord=()=>{},onChoices=()=>{},onDebug=()=>{},makeId=identifier,setTimer=setTimeout,clearTimer=clearTimeout}={}){
+  // Window timer methods cannot be invoked with a VoiceFlow receiver. Wrapping
+  // the defaults preserves their global receiver and keeps test injection intact.
+  constructor({api,bridge,conversations=null,isAuthorized=()=>false,isForeground=()=>true,onState=()=>{},onTranscript=()=>{},onRecord=()=>{},onChoices=()=>{},onDebug=()=>{},makeId=identifier,setTimer=(...args)=>globalThis.setTimeout(...args),clearTimer=(...args)=>globalThis.clearTimeout(...args)}={}){
     Object.assign(this,{api,bridge,conversations,isAuthorized,isForeground,onState,onTranscript,onRecord,onChoices,onDebug,makeId,setTimer,clearTimer});
     this.generation=0;this.run=null;this.lastRequestId=null;this.state='idle';this.debug={history:[]};this.timer=null;this.attemptedActions=new Set();
   }

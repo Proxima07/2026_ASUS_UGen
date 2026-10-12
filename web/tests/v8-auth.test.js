@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {mount,settle,deferred} from './dom-fixture.js';
-import {Api} from '../js/api.js?rev=web-v9';
+import {Api} from '../js/api.js?rev=web-v10';
 
 const identity={user_id:'user_A',device_id:'dev_A',label:'A',auth_kind:'session'};
 const response=(status,value,trace='http_fixture')=>({ok:status>=200&&status<300,status,headers:{get:key=>key==='X-Request-ID'?trace:null},json:async()=>value});
@@ -14,19 +14,66 @@ test('登入 probe 的 401 保留 HTTP 追蹤資訊，由 coordinator 決定同�
 });
 
 let sequence=0;
-async function nativeMount(){
+async function nativeMount({strictTimers=false}={}){
   const document=mount(await readFile(new URL('../index.html',import.meta.url),'utf8'));
   const keys=['document','navigator','location','NativeBridge','MediaRecorder','AudioContext','webkitAudioContext','isSecureContext','fetch','setTimeout','clearTimeout','setInterval','clearInterval'];const descriptors=new Map(keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   const sent=[],requests=[],timers=new Map(),intervals=new Map();let timerId=0;
-  const h={document,sent,requests,timers,intervals,me:()=>response(200,identity),actions:()=>response(200,{items:[]})};
+  const h={document,sent,requests,timers,intervals,me:()=>response(200,identity),actions:()=>response(200,{items:[]}),audioJob:()=>response(200,{job_id:'audio_voice',status:'queued'})};
   const replace=(key,value)=>Object.defineProperty(globalThis,key,{configurable:true,value});
   replace('document',document);replace('navigator',{});replace('location',{protocol:'https:'});replace('NativeBridge',{postMessage:raw=>sent.push(JSON.parse(raw))});replace('MediaRecorder',undefined);replace('AudioContext',undefined);replace('webkitAudioContext',undefined);replace('isSecureContext',true);
-  replace('setTimeout',(fn,ms)=>{const id=++timerId;timers.set(id,{fn,ms});return id;});replace('clearTimeout',id=>timers.delete(id));replace('setInterval',(fn,ms)=>{const id=++timerId;intervals.set(id,{fn,ms});return id;});replace('clearInterval',id=>intervals.delete(id));
-  replace('fetch',async path=>{requests.push(path);if(path==='/v1/auth/me')return h.me();if(path==='/v1/actions')return h.actions();if(path.startsWith('/v1/notes?'))return response(200,{items:[]});throw new Error(`unexpected ${path}`);});
+  // Browser timer methods accept the global receiver (or an omitted receiver),
+  // but reject class instances. Arrow-only fakes had hidden this WebView error.
+  const checkReceiver=value=>{if(strictTimers&&value!==undefined&&value!==null&&value!==globalThis)throw new TypeError('Illegal invocation');};
+  replace('setTimeout',function(fn,ms){checkReceiver(this);const id=++timerId;timers.set(id,{fn,ms});return id;});replace('clearTimeout',function(id){checkReceiver(this);return timers.delete(id);});replace('setInterval',function(fn,ms){checkReceiver(this);const id=++timerId;intervals.set(id,{fn,ms});return id;});replace('clearInterval',function(id){checkReceiver(this);return intervals.delete(id);});
+  replace('fetch',async path=>{requests.push(path);if(path==='/v1/auth/me')return h.me();if(path==='/v1/actions')return h.actions();if(path.startsWith('/v1/notes?'))return response(200,{items:[]});if(path.startsWith('/v1/audio/'))return h.audioJob();throw new Error(`unexpected ${path}`);});
   h.reply=async(message,type='ready',extra={})=>{globalThis.NativeBridge.onmessage({data:JSON.stringify({protocol_version:'1',message_id:message.message_id,type,...(type==='ready'?{identity:{user_id:identity.user_id,device_id:identity.device_id},capabilities:['notes.create_native'],recording:{protocol_version:'1'}}:{}),...extra})});await settle();};
   h.restore=()=>{for(const [key,descriptor]of descriptors){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}};
   await import(`../js/main.js?native-auth-${++sequence}`);await settle();return h;
 }
+
+test('瀏覽器 timer receiver 規則下，真實語音清理仍讓 Cookie 200 登入完成',async()=>{
+  const h=await nativeMount({strictTimers:true});try{
+    await h.reply(h.sent[0]);
+    assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');
+    assert.equal(h.document.querySelector('#connection-warning').hidden,true);
+    assert.equal(h.document.querySelector('main').hidden,false);
+    assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'登入完成');
+    assert.equal(h.document.querySelector('#connection-debug-code').textContent,'尚未取得');
+    assert.equal(h.requests.filter(path=>path==='/v1/actions').length,1);
+    assert.equal(h.requests.filter(path=>path.startsWith('/v1/notes?')).length,1);
+    assert.equal(h.sent.length,1);
+  }finally{h.restore();}
+});
+
+test('嚴格瀏覽器 timer 下，完整介面可錄音、手動送出並取消 STT 輪詢',async()=>{
+  const h=await nativeMount({strictTimers:true});try{
+    await h.reply(h.sent[0]);await h.document.querySelector('#voice-mic').emit('click');await settle();
+    const start=h.sent.find(message=>message.type==='recording_start');assert.ok(start);
+    await h.reply(start,'recording_started',{recording_id:'record_voice'});
+    const mic=h.document.querySelector('#voice-mic'),stop=h.document.querySelector('#voice-stop'),cancel=h.document.querySelector('#voice-cancel');
+    assert.equal(mic.classList.contains('listening'),true);assert.equal(stop.hidden,false);assert.equal(cancel.classList.contains('capture-cancel'),true);
+    assert.equal(h.document.querySelector('#voice-stage').textContent,'收聽中');
+    assert.ok([...h.intervals.values()].some(timer=>timer.ms===200));
+    await h.reply(start,'recording_progress',{recording_id:'record_voice',elapsed_ms:2500,level:.7});
+    assert.equal(h.document.querySelector('#voice-level').value,.7);
+    await stop.emit('click');await stop.emit('click');await settle();
+    assert.equal(h.sent.filter(message=>message.type==='recording_stop').length,1);
+    assert.equal(h.document.querySelector('#voice-stage').textContent,'錄音收尾中');
+    const stopMessage=h.sent.find(message=>message.type==='recording_stop');
+    await h.reply(stopMessage,'recording_uploading',{recording_id:'record_voice'});
+    await h.reply(stopMessage,'recording_uploaded',{recording_id:'record_voice',purpose:'command',job_id:'audio_voice',status:'queued'});
+    assert.equal(h.document.querySelector('#voice-stage').textContent,'後端排隊中');
+    assert.deepEqual(h.requests.filter(path=>path.startsWith('/v1/audio/')),['/v1/audio/audio_voice']);
+    const poll=[...h.timers.values()].find(timer=>timer.ms===1200);assert.ok(poll);
+    await cancel.emit('click');await settle();
+    assert.equal(h.document.querySelector('#voice-stage').textContent,'流程已停止');
+    assert.equal([...h.timers.values()].some(timer=>timer.ms===1200),false);
+    poll.fn();await settle();assert.equal(h.requests.filter(path=>path.startsWith('/v1/audio/')).length,1);
+    await mic.emit('click');await settle();assert.equal(h.sent.filter(message=>message.type==='recording_start').length,2);
+    await cancel.emit('click');await settle();assert.equal(h.sent.filter(message=>message.type==='recording_cancel').length,1);
+    assert.equal(h.sent.some(message=>'audio'in message||'base64'in message),false);
+  }finally{h.restore();}
+});
 
 test('完整 APK 掛載先等 hello；Cookie 401 自動同步一次，之後只允許明確人工重試',async()=>{
   const h=await nativeMount();try{
@@ -84,7 +131,7 @@ test('Cookie 200 後錄音草稿清理失敗不再停在驗證中，顯示階段
     assert.doesNotMatch(JSON.stringify(logs),/private playback|上一個帳號/);
     assert.deepEqual(logs[0],['[local-assistant login]',{phase:'clear_audio',code:'login_state_reset_failed'}]);
     await h.document.querySelector('#voice-mic').emit('click');await settle();
-    assert.match(h.document.querySelector('#toast').textContent,/網頁登入驗證未完成/);assert.equal(h.sent.length,1);
+    assert.match(h.document.querySelector('#toast').textContent,/介面重置失敗/);assert.equal(h.sent.length,1);
     playback.removeAttribute=remove;await h.document.querySelector('#connection-retry').emit('click');await settle();await h.reply(h.sent[1]);
     assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');assert.equal(h.document.querySelector('main').hidden,false);
   }finally{console.error=originalError;h.restore();}

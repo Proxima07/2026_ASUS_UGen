@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Bridge,validBridgeMessage} from '../js/bridge.js?rev=web-v9';
+import {Bridge,validBridgeMessage} from '../js/bridge.js?rev=web-v10';
 
 test('沒有原生橋接時不允許手機操作',()=>{delete globalThis.NativeBridge;const bridge=new Bridge();bridge.init();assert.equal(bridge.nativePresent,false);assert.throws(()=>bridge.execute('act_1','phone.dial'),/Android APK/);});
 test('握手後只傳操作 ID，不將網頁參數或憑證交給 APK',()=>{const messages=[];globalThis.NativeBridge={postMessage:raw=>messages.push(JSON.parse(raw))};const bridge=new Bridge();bridge.init();assert.equal(messages[0].type,'hello');assert.throws(()=>bridge.execute('act_1','phone.dial'),/尚未提供/);globalThis.NativeBridge.onmessage({data:JSON.stringify({protocol_version:'1',message_id:messages[0].message_id,type:'ready',capabilities:['phone.dial'],identity:{user_id:'user1',device_id:'device1'}})});bridge.bindSession({user_id:'user1',device_id:'device1'});bridge.execute('act_1','phone.dial');assert.deepEqual(Object.keys(messages[1]).sort(),['protocol_version','message_id','type','action_id'].sort());assert.equal(messages[1].action_id,'act_1');assert.throws(()=>bridge.execute('act_2','notes.share'),/尚未提供/);delete globalThis.NativeBridge;});

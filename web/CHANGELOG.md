@@ -1,5 +1,15 @@
 # 網頁更新紀錄
 
+## web_v10 — 2026-10-12
+
+- 依web_v9實際診斷定位「清除舊語音指令」／clear_voice失敗；HTTP200表示Cookie API通過，頁面清理仍可能失敗。
+- 修正VoiceFlow、CaptureSession與NativeCaptureSession預設計時函式被保存後，以元件物件作為接收者呼叫的TypeError。現在透過globalThis呼叫setTimeout／clearTimeout，保留測試注入能力。
+- 原web_v9搭配嚴格接收者測試可重現HTTP200＋login_state_reset_failed／clear_voice；修正後同一路徑完成登入。
+- 新增5項回歸：實際HTML登入清理、原生收聽與停止／取消／再錄、瀏覽器完整Blob收尾、權限取消後遲到stream、原生180秒期限與遲到上傳回覆隔離。
+- 全部145項Node測試通過，包含原有140項。以前測試用的Node計時器／箭頭函式未檢查瀏覽器接收者，已補此差異；尚未實際WebView或目標手機驗收。
+- 保留web_v9分階段診斷、身分核對、私人資料清理與登入期限。執行資源統一web-v10，須套用整個差異包。
+- 本包相對web_v9，只更新網頁；backend_v6、android_v6、`.env`、配對資料及既有cloudflared保留，不需重建APK、重新配對或清快取。
+
 ## web_v9 — 2026-10-12
 
 - 修正登入成功後清理舊狀態會自行更新 authGeneration，清理例外卻被當成過期回覆忽略的路徑；不再無限留下「正在驗證網頁登入 Cookie」。

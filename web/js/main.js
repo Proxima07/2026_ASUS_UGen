@@ -1,13 +1,13 @@
-// @web-revision: web-v9
-import {Api} from './api.js?rev=web-v9';
-import {Bridge} from './bridge.js?rev=web-v9';
-import {Actions} from './actions.js?rev=web-v9';
-import {Chat} from './chat.js?rev=web-v9';
-import {Notes} from './notes.js?rev=web-v9';
-import {Recorder} from './recorder.js?rev=web-v9';
-import {Voice,CaptureCoordinator} from './voice.js?rev=web-v9';
-import {errorMessage,setMessage} from './state.js?rev=web-v9';
-import {ConversationCoordinator} from './conversation.js?rev=web-v9';
+// @web-revision: web-v10
+import {Api} from './api.js?rev=web-v10';
+import {Bridge} from './bridge.js?rev=web-v10';
+import {Actions} from './actions.js?rev=web-v10';
+import {Chat} from './chat.js?rev=web-v10';
+import {Notes} from './notes.js?rev=web-v10';
+import {Recorder} from './recorder.js?rev=web-v10';
+import {Voice,CaptureCoordinator} from './voice.js?rev=web-v10';
+import {errorMessage,setMessage} from './state.js?rev=web-v10';
+import {ConversationCoordinator} from './conversation.js?rev=web-v10';
 
 let identity=null, checking=false, checkAgain=false, loggingOut=false, authGeneration=0, toastTimer, voice=null, connectionIssue=null, nativeRenewals=0;
 const capture=new CaptureCoordinator();
@@ -26,6 +26,7 @@ function tab(name){if(name!=='voice'&&voice?.isBusy())voice.interrupt('已暫停
 function updateAccount(){
   pairForm.hidden=bridge.nativePresent||authenticated();
   const native=bridge.nativePresent,paired=Boolean(bridge.ready&&bridge.identity?.user_id&&bridge.identity?.device_id),phase=connectionIssue?.phase;
+  const resetFailed=connectionIssue?.code==='login_state_reset_failed'&&connectionIssue?.status===200;
   let description=identity?`已連接 · ${identity.label||'你的裝置'}`:'輸入中樞提供的一次性配對碼。登入狀態只保存在這個瀏覽器。';
   let notice='尚未連線。請先完成配對。';
   if(native&&!authenticated()){
@@ -34,6 +35,7 @@ function updateAccount(){
     else if(phase==='native_revoked'){description='後端確認 APK 裝置配對已失效。請向管理者取得新的配對碼，再到 APK 連線設定完成配對。';notice='APK 裝置配對已失效，需要在手機重新配對。';}
     else if(phase==='renewing_native'){description='正在使用 APK 已保存的配對重新建立網頁登入，不需再次輸入配對碼。';notice='正在重新同步 APK 與網頁登入，請稍候。';}
     else if(phase==='native_failed'){description='手機登入同步未完成。請按 APK 上方「同步」，並查看下方連線處理資訊。';notice='APK 登入同步未完成，請查看連線處理資訊；目前不能執行手機操作。';}
+    else if(phase==='web_failed'&&resetFailed){description='網頁登入驗證已通過，但介面重置失敗。請查看下方失敗階段與錯誤代碼。';notice='網頁登入驗證已通過；介面重置失敗，手機操作已暫停。';}
     else if(phase==='web_failed'){description='APK 已開啟；網頁 API 未能完成登入驗證。請查看下方 HTTP 狀態與追蹤 ID。';notice='網頁登入驗證未完成，請查看連線處理資訊或按 APK 上方「同步」。';}
     else if(paired){description='APK 配對已核對，正在驗證網頁登入 Cookie…';notice='正在核對網頁登入，請稍候。';}
     else{description='正在連接 APK 並核對登入狀態…';notice='正在等候 APK 登入同步，請稍候；若停留在這裡，請按上方「同步」。';}
@@ -45,7 +47,7 @@ function updateAccount(){
   const retry=document.querySelector('#connection-retry');if(retry){retry.hidden=authenticated()||!native&&!connectionIssue;retry.disabled=native?Boolean(bridge.helloMessageId):checking;retry.textContent=native?'重新建立登入':'重新檢查登入';}
   warning.hidden=authenticated();warning.textContent=notice;
   const debug=document.querySelector('#connection-debug');
-  if(debug){debug.hidden=!native&&!connectionIssue;if(connectionIssue&&phase!=='web_checking'&&phase!=='connected'&&phase!=='renewing_native')debug.open=true;const fields={version:'web-v9',native:native?(paired?'APK 身分已核對':bridge.ready?'橋接已回覆，但未提供完整身分':'尚未完成橋接'):'一般瀏覽器',web:authenticated()?'Cookie 驗證成功':phase==='web_unauthorized'?'Cookie 未授權':phase==='identity_mismatch'?'身分不一致':phase==='native_failed'?'等待 APK 同步完成':phase==='web_failed'?'驗證失敗':'等待驗證',stage:LOGIN_STAGES[connectionIssue?.stage]||'等待 APK 同步',http:connectionIssue?.status?`HTTP ${connectionIssue.status}`:'尚未取得',code:connectionIssue?.code||'尚未取得',trace:connectionIssue?.httpRequestId||'尚未取得',error:connectionIssue?.message||connectionIssue?.code||'尚無錯誤'};for(const [key,value]of Object.entries(fields)){const node=document.querySelector(`#connection-debug-${key}`);if(node)node.textContent=String(value).slice(0,500);}}
+  if(debug){debug.hidden=!native&&!connectionIssue;if(connectionIssue&&phase!=='web_checking'&&phase!=='connected'&&phase!=='renewing_native')debug.open=true;const fields={version:'web-v10',native:native?(paired?'APK 身分已核對':bridge.ready?'橋接已回覆，但未提供完整身分':'尚未完成橋接'):'一般瀏覽器',web:authenticated()?'Cookie 驗證成功':phase==='web_unauthorized'?'Cookie 未授權':phase==='identity_mismatch'?'身分不一致':phase==='native_failed'?'等待 APK 同步完成':phase==='web_failed'?(resetFailed?'Cookie 驗證成功；介面重置失敗':'驗證失敗'):'等待驗證',stage:LOGIN_STAGES[connectionIssue?.stage]||'等待 APK 同步',http:connectionIssue?.status?`HTTP ${connectionIssue.status}`:'尚未取得',code:connectionIssue?.code||'尚未取得',trace:connectionIssue?.httpRequestId||'尚未取得',error:connectionIssue?.message||connectionIssue?.code||'尚無錯誤'};for(const [key,value]of Object.entries(fields)){const node=document.querySelector(`#connection-debug-${key}`);if(node)node.textContent=String(value).slice(0,500);}}
   if(location.protocol!=='https:'){warning.hidden=false;warning.textContent='請使用 HTTPS 網址。登入 Cookie 與麥克風需要安全連線。';}
 }
 function clearPrivateState(message){

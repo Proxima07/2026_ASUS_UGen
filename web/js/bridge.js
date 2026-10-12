@@ -1,5 +1,5 @@
-// @web-revision: web-v9
-import {identifier} from './state.js?rev=web-v9';
+// @web-revision: web-v10
+import {identifier} from './state.js?rev=web-v10';
 export function validBridgeMessage(value) {
   return Boolean(value && typeof value==='object' && !Array.isArray(value) && value.protocol_version==='1' && typeof value.type==='string' && ['ready','action_result','error','logged_out','recording_started','recording_progress','recording_stopping','recording_uploading','recording_uploaded','recording_cancelled'].includes(value.type));
 }

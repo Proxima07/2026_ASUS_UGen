@@ -1,4 +1,4 @@
-// @web-revision: web-v9
+// @web-revision: web-v10
 // Only opaque server identifiers live here. User/assistant history is assembled
 // by the server, never accepted from the browser as authority.
 export class ConversationCoordinator {

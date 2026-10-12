@@ -1,6 +1,6 @@
-// @web-revision: web-v9
-import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js?rev=web-v9';
-import {uncertainResponse} from './conversation.js?rev=web-v9';
+// @web-revision: web-v10
+import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js?rev=web-v10';
+import {uncertainResponse} from './conversation.js?rev=web-v10';
 export class Chat {
   constructor({api,bridge=null,actions,conversations=null,authenticated=()=>false,onNotesChanged=()=>{},toast=()=>{}}){this.api=api;this.bridge=bridge;this.actions=actions;this.conversations=conversations;this.reservation=null;this.authenticated=authenticated;this.onNotesChanged=onNotesChanged;this.toast=toast;this.pending=null;this.busy=false;this.generation=0;this.replies=new Map();this.lastNotes=new Set();this.form=document.querySelector('#chat-form');this.input=document.querySelector('#chat-input');this.send=document.querySelector('#chat-send');this.hint=document.querySelector('#chat-hint');this.conversation=document.querySelector('#conversation');this.empty=document.querySelector('#conversation-empty');this.form.addEventListener('submit',e=>{e.preventDefault();this.submit();});this.input.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();this.submit();}});for(const button of document.querySelectorAll('[data-prompt]'))button.addEventListener('click',()=>this.fill(button.dataset.prompt));}
   fill(text){this.input.value=text;this.input.focus();}

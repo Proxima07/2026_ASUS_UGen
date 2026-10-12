@@ -1,4 +1,4 @@
-// @web-revision: web-v9
+// @web-revision: web-v10
 export class CaptureCoordinator {
   constructor(){this.owner=null;}
   acquire(name){if(this.owner)return null;this.owner={name};return this.owner;}
@@ -14,7 +14,8 @@ function closeContext(context){try{const result=context?.close();if(result?.catc
 // Each recording owns its own stream, callbacks and token. No old callback can
 // clean up another recording. Release happens synchronously, not in onstop.
 export class CaptureSession {
-  constructor({coordinator,token,onPhase=()=>{},onBlob=()=>{},onError=()=>{},onCancel=()=>{},setTimer=setTimeout,clearTimer=clearTimeout,stopTimeoutMs=3000,maxBytes=10*1024*1024}={}){
+  // Keep the Window receiver when defaults are later called as session methods.
+  constructor({coordinator,token,onPhase=()=>{},onBlob=()=>{},onError=()=>{},onCancel=()=>{},setTimer=(...args)=>globalThis.setTimeout(...args),clearTimer=(...args)=>globalThis.clearTimeout(...args),stopTimeoutMs=3000,maxBytes=10*1024*1024}={}){
     Object.assign(this,{coordinator,token,onPhase,onBlob,onError,onCancel,setTimer,clearTimer,stopTimeoutMs,maxBytes});
     this.stream=null;this.recorder=null;this.context=null;this.chunks=[];this.bytes=0;this.state='requesting';this.stopRequested=false;this.sendRequested=false;this.finalized=false;this.released=false;this.watchdog=null;this.permissionWatchdog=null;this.permissionResolve=null;
   }
@@ -91,7 +92,7 @@ export class CaptureSession {
 // APK keeps the encoded file private and uploads it only after an explicit stop.
 // JavaScript receives progress/job metadata, never the recording bytes.
 export class NativeCaptureSession {
-  constructor({bridge,identity,coordinator,token,onPhase=()=>{},onProgress=()=>{},onUploaded=()=>{},onError=()=>{},onCancel=()=>{},setTimer=setTimeout,clearTimer=clearTimeout}={}){
+  constructor({bridge,identity,coordinator,token,onPhase=()=>{},onProgress=()=>{},onUploaded=()=>{},onError=()=>{},onCancel=()=>{},setTimer=(...args)=>globalThis.setTimeout(...args),clearTimer=(...args)=>globalThis.clearTimeout(...args)}={}){
     Object.assign(this,{bridge,identity,coordinator,token,onPhase,onProgress,onUploaded,onError,onCancel,setTimer,clearTimer});this.state='requesting';this.finalized=false;this.released=false;this.native=null;this.watchdog=null;
   }
   start(){
