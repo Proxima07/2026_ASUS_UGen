@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c635d">
+  <meta name="description" content="由私人設備處理的個人助理。對話、筆記與錄音整理。">
+  <title>留白 · 個人助理</title>
+  <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
+      <button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線設定</button>
+    </header>
+    <section id="account-panel" class="account-panel card" hidden>
+      <div class="section-heading"><h2>連接你的私人中樞</h2><button id="account-close" class="quiet-button" type="button">收起</button></div>
+      <p id="session-description" class="muted">請先完成配對，開始對話與保存筆記。</p>
+      <form id="pair-form">
+        <label for="pair-code">一次性配對碼</label>
+        <input id="pair-code" name="code" autocomplete="off" spellcheck="false" minlength="8" maxlength="200" required placeholder="由中樞管理者提供">
+        <label for="pair-label">這台裝置的名稱</label>
+        <input id="pair-label" name="label" autocomplete="off" maxlength="100" value="我的瀏覽器" required>
+        <button id="pair-submit" class="primary-button" type="submit">完成配對</button>
+      </form>
+      <p id="native-pair-tip" class="muted" hidden>手機版請在 APK 的連線設定完成配對；網頁會使用 APK 提供的登入狀態。</p>
+      <button id="logout-button" class="secondary-button" type="button" hidden>登出網頁</button>
+      <p id="pair-message" class="form-message" role="status"></p>
+    </section>
+    <div id="connection-warning" class="notice" role="status" hidden>尚未連線。請先完成配對。</div>
+    <nav class="tabs" aria-label="功能分頁">
+      <button id="tab-chat" class="tab active" type="button" data-tab="chat" aria-controls="panel-chat" aria-selected="true">對話</button>
+      <button id="tab-notes" class="tab" type="button" data-tab="notes" aria-controls="panel-notes" aria-selected="false">筆記</button>
+      <button id="tab-audio" class="tab" type="button" data-tab="audio" aria-controls="panel-audio" aria-selected="false">錄音整理</button>
+    </nav>
+    <main>
+      <section id="panel-chat" class="tab-panel" aria-labelledby="tab-chat">
+        <div class="section-intro"><p class="eyebrow">你的日常，有人接住</p><h1>今天想交給我什麼？</h1><p class="muted">記下一件事、安排時間，或找到想聯絡的人。</p></div>
+        <div id="conversation" class="conversation" aria-live="polite" aria-relevant="additions text">
+          <div id="conversation-empty" class="welcome-card"><p>從一句簡單的話開始。</p><div class="suggestions"><button type="button" data-prompt="幫我打電話給媽媽">打電話給媽媽</button><button type="button" data-prompt="幫我記下：週五開會要帶專案報告。">記下一件事</button><button type="button" data-prompt="幫我設定每天早上七點的起床鬧鐘。">設定起床鬧鐘</button></div><p class="small muted">手機操作需在 Android APK 開啟，並由你確認。</p></div>
+        </div>
+        <section id="action-area" class="action-area" aria-label="待處理的手機操作"></section>
+        <form id="chat-form" class="composer card">
+          <label class="visually-hidden" for="chat-input">你的訊息</label>
+          <textarea id="chat-input" rows="2" maxlength="8000" placeholder="例如：幫我記下今天的靈感…" required></textarea>
+          <div class="composer-bottom"><button id="use-voice-button" class="quiet-button" type="button">錄音輸入</button><span id="chat-hint" class="small muted">理解與整理由私人中樞處理</span><button id="chat-send" class="primary-button" type="submit">送出</button></div>
+        </form>
+      </section>
+      <section id="panel-notes" class="tab-panel" aria-labelledby="tab-notes" hidden>
+        <div class="section-heading"><div><p class="eyebrow">值得留下的日常</p><h1>我的筆記</h1></div><button id="note-new" class="primary-button" type="button">新增筆記</button></div>
+        <label class="visually-hidden" for="notes-search">搜尋筆記</label><input id="notes-search" class="search-input" type="search" placeholder="搜尋標題或內容" autocomplete="off">
+        <p id="notes-message" class="form-message" role="status"></p>
+        <div id="notes-list" class="notes-list"></div>
+        <section id="note-editor" class="card note-editor" hidden>
+          <div class="section-heading"><h2 id="note-editor-heading">新增筆記</h2><button id="note-editor-close" class="quiet-button" type="button">關閉</button></div>
+          <form id="note-form"><label for="note-title">標題</label><input id="note-title" maxlength="200" required><label for="note-content">內容</label><textarea id="note-content" rows="8" maxlength="16000" required></textarea><details id="note-transcript-container" hidden><summary>原始逐字稿</summary><textarea id="note-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="note-save" class="primary-button" type="submit">保存筆記</button><button id="note-delete" class="danger-button" type="button" hidden>刪除</button></div><p id="note-editor-message" class="form-message" role="status"></p></form>
+        </section>
+      </section>
+      <section id="panel-audio" class="tab-panel" aria-labelledby="tab-audio" hidden>
+        <div class="section-intro"><p class="eyebrow">說過的話，也能留下</p><h1>錄音整理</h1><p class="muted">錄下想法，交給私人設備轉錄與整理。確認後才保存為筆記。</p></div>
+        <section class="record-card card"><div id="record-indicator" class="record-indicator" aria-hidden="true"><span></span></div><p id="record-status" class="record-status" role="status">準備好時，就按下錄音。</p><p id="record-time" class="record-time">00:00</p><div class="button-row centered"><button id="record-start" class="primary-button" type="button">開始錄音</button><button id="record-stop" class="danger-button" type="button" disabled>停止錄音</button></div><div class="audio-import"><label for="audio-file" class="quiet-button">或選擇既有音檔</label><input id="audio-file" type="file" accept="audio/*,.webm,.wav,.mp3,.m4a,.ogg,.aac,.flac"><p class="small muted">單次最多 10 MiB，建議以 3 分鐘內的短錄音展示。</p></div><audio id="record-playback" controls preload="metadata" hidden></audio><button id="audio-upload" class="secondary-button" type="button" hidden>轉錄並整理</button><p id="audio-message" class="form-message" role="status"></p></section>
+        <section id="audio-result" class="card" hidden><div class="section-heading"><h2>確認這次的筆記</h2><span id="audio-job-status" class="status-pill"></span></div><form id="audio-note-form"><label for="audio-note-title">標題</label><input id="audio-note-title" maxlength="200" required><label for="audio-note-content">筆記內容</label><textarea id="audio-note-content" rows="7" maxlength="16000" required></textarea><details open><summary>逐字稿 · 可以修正</summary><textarea id="audio-transcript" rows="6" maxlength="24000"></textarea></details><div class="button-row"><button id="audio-note-save" class="primary-button" type="submit">保存到筆記</button><button id="transcript-to-chat" class="secondary-button" type="button">帶入對話</button></div><p id="audio-save-message" class="form-message" role="status"></p></form></section>
+      </section>
+    </main>
+    <footer class="app-footer"><span>你掌控的設備，理解你留下的日常。</span><button id="footer-settings" class="quiet-button" type="button">連線設定</button></footer>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p>請啟用 JavaScript，才能使用對話與手機操作。</p></noscript>
+</body>
+</html>

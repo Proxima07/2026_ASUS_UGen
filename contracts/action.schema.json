@@ -1,0 +1,293 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Request Id"
+    },
+    "kind": {
+      "enum": [
+        "contacts.search",
+        "phone.dial",
+        "alarm.create",
+        "calendar.create",
+        "notes.save_local",
+        "notes.share"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "expires_at": {
+      "title": "Expires At",
+      "type": "number"
+    }
+  },
+  "required": [
+    "action_id",
+    "request_id",
+    "kind",
+    "payload",
+    "state",
+    "expires_at"
+  ],
+  "title": "ActionEnvelope",
+  "type": "object",
+  "x-tool-arguments": {
+    "contacts.search": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "purpose": {
+          "default": "dial",
+          "enum": [
+            "dial",
+            "lookup"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "ContactsSearchArgs",
+      "type": "object"
+    },
+    "phone.dial": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "",
+          "maxLength": 100,
+          "title": "Name",
+          "type": "string"
+        },
+        "phone_number": {
+          "maxLength": 32,
+          "minLength": 3,
+          "pattern": "^\\+?[0-9][0-9 ()-]{1,30}[0-9]$",
+          "title": "Phone Number",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phone_number"
+      ],
+      "title": "DialArgs",
+      "type": "object"
+    },
+    "alarm.create": {
+      "additionalProperties": false,
+      "properties": {
+        "hour": {
+          "maximum": 23,
+          "minimum": 0,
+          "title": "Hour",
+          "type": "integer"
+        },
+        "minute": {
+          "maximum": 59,
+          "minimum": 0,
+          "title": "Minute",
+          "type": "integer"
+        },
+        "label": {
+          "default": "提醒",
+          "maxLength": 100,
+          "title": "Label",
+          "type": "string"
+        },
+        "weekdays": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 7,
+          "title": "Weekdays",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hour",
+        "minute"
+      ],
+      "title": "AlarmArgs",
+      "type": "object"
+    },
+    "calendar.create": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "location": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Location",
+          "type": "string"
+        },
+        "reminder_minutes": {
+          "default": 10,
+          "maximum": 10080,
+          "minimum": 0,
+          "title": "Reminder Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title",
+        "start",
+        "end"
+      ],
+      "title": "CalendarArgs",
+      "type": "object"
+    },
+    "notes.create": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "content": {
+          "maxLength": 16000,
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "transcript": {
+          "anyOf": [
+            {
+              "maxLength": 24000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcript"
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Idempotency Key"
+        }
+      },
+      "required": [
+        "title",
+        "content"
+      ],
+      "title": "NoteCreate",
+      "type": "object"
+    },
+    "notes.search": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "NoteSearchArgs",
+      "type": "object"
+    },
+    "notes.save_local": {
+      "additionalProperties": false,
+      "properties": {
+        "note_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Note Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "note_id"
+      ],
+      "title": "NoteReferenceArgs",
+      "type": "object"
+    },
+    "notes.share": {
+      "additionalProperties": false,
+      "properties": {
+        "note_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Note Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "note_id"
+      ],
+      "title": "NoteReferenceArgs",
+      "type": "object"
+    }
+  }
+}

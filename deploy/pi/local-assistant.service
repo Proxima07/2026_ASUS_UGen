@@ -1,0 +1,27 @@
+[Unit]
+Description=Local Assistant Python Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 先依 README 建立專用帳號與目錄，勿以 root 執行。
+User=localassistant
+Group=localassistant
+WorkingDirectory=/opt/local-assistant/backend
+Environment=PYTHONUNBUFFERED=1
+# .env 由後端自行讀取；systemd 只指定啟動路徑。
+Environment=PORT=8000
+ExecStart=/opt/local-assistant/backend/.venv/bin/python -m app.run
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# 此路徑需和 .env 的資料路徑設定一致；勿把 SQLite 放入唯讀原始碼目錄。
+ReadWritePaths=/var/lib/local-assistant
+
+[Install]
+WantedBy=multi-user.target

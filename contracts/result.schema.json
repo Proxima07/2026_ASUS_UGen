@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "execution_token": {
+      "maxLength": 200,
+      "minLength": 20,
+      "title": "Execution Token",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "completed",
+        "opened",
+        "handed_off",
+        "cancelled",
+        "permission_denied",
+        "unsupported",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "result": {
+      "additionalProperties": true,
+      "title": "Result",
+      "type": "object"
+    }
+  },
+  "required": [
+    "execution_token",
+    "state"
+  ],
+  "title": "ActionResult",
+  "type": "object"
+}

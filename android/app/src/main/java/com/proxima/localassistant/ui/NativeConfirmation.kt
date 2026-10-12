@@ -1,0 +1,64 @@
+package com.proxima.localassistant.ui
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.widget.ScrollView
+import android.widget.TextView
+import org.json.JSONObject
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Native confirmation uses actual server-fetched parameters, never a web supplied summary. */
+object NativeConfirmation {
+    fun show(activity: Activity, kind: String, payload: JSONObject, callback: (Boolean) -> Unit) {
+        showDetailed(activity, kind, payload, "", callback)
+    }
+
+    fun showDetailed(activity: Activity, kind: String, payload: JSONObject, additionalDetails: String,
+                     callback: (Boolean) -> Unit) {
+        if (activity.isFinishing || activity.isDestroyed) { callback(false); return }
+        val details = try { describe(kind, payload) } catch (_: Exception) {
+            callback(false); return
+        }
+        val density = activity.resources.displayMetrics.density
+        val text = TextView(activity).apply {
+            this.text = if (additionalDetails.isBlank()) details else "$additionalDetails\n\n$details"
+            textSize = 16f
+            setPadding((24 * density).toInt(), (12 * density).toInt(), (24 * density).toInt(), (12 * density).toInt())
+            setTextIsSelectable(true)
+        }
+        val scroll = ScrollView(activity).apply { addView(text) }
+        val answered = AtomicBoolean(false)
+        fun answer(value: Boolean) { if (answered.compareAndSet(false, true)) callback(value) }
+        AlertDialog.Builder(activity).setTitle("確認手機操作").setView(scroll)
+            .setPositiveButton("確認") { _, _ -> answer(true) }
+            .setNegativeButton("取消") { _, _ -> answer(false) }
+            .setOnCancelListener { answer(false) }.show()
+    }
+
+    fun describe(kind: String, payload: JSONObject): String = when (kind) {
+        "contacts.search" -> "搜尋手機通訊錄：${payload.getString("query")}\n只將符合的最多 20 筆姓名與號碼傳回已配對中樞。"
+        "phone.dial" -> "聯絡人：${payload.optString("name").ifBlank { "未指定" }}\n電話：${payload.getString("phone_number")}\n開啟撥號畫面後，由你按下通話。"
+        "alarm.create" -> {
+            val days = payload.optJSONArray("weekdays")
+            val names = arrayOf("", "週日", "週一", "週二", "週三", "週四", "週五", "週六")
+            val repeat = if (days == null || days.length() == 0) "不重複（下一個符合時間）"
+                else (0 until days.length()).joinToString("、") { names[days.getInt(it)] }
+            "鬧鐘：${String.format(Locale.ROOT, "%02d:%02d", payload.getInt("hour"), payload.getInt("minute"))}\n名稱：${payload.optString("label", "提醒")}\n重複：$repeat\n使用手機目前時區。請在時鐘 App 確認鬧鐘已建立。"
+        }
+        "calendar.create" -> "事件：${payload.getString("title")}\n開始：${formatDate(payload.getString("start"))}\n結束：${formatDate(payload.getString("end"))}\n地點：${payload.optString("location")}\n提醒：開始前 ${payload.optInt("reminder_minutes", 10)} 分鐘\n說明：${payload.optString("description")}"
+        "notes.save_local" -> "保存到這個 App 的加密筆記\n\n${payload.getString("title")}\n\n${payload.getString("content")}"
+        "notes.share" -> "把以下內容交給你選擇的 App：\n\n${payload.getString("title")}\n\n${payload.getString("content")}\n\n接收 App 是否保存，需由你在該 App 確認。"
+        else -> throw IllegalArgumentException("Unsupported action")
+    }
+
+    private fun formatDate(value: String): String {
+        val parsed = OffsetDateTime.parse(value)
+        val local = parsed.atZoneSameInstant(ZoneId.systemDefault())
+        val format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm XXX", Locale.TAIWAN)
+        return "${format.format(local)}（手機時區 ${local.zone.id}；原始 $value）"
+    }
+}

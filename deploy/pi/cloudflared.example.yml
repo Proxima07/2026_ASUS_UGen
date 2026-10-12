@@ -1,0 +1,14 @@
+# 複製到實際 cloudflared 設定位置，填入已建立的 Tunnel UUID 與本機憑證路徑。
+# 本檔不含有效 tunnel credentials；正式 credentials JSON 不可加入 ZIP。
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /etc/cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  # 網頁及 /v1 API 共用同一個網域，避免額外的 CORS / Cookie 設定。
+  - hostname: assistant.example.com
+    service: http://127.0.0.1:8000
+  - service: http_status:404
+
+# 安全邊界：手機 HTTPS 在 Cloudflare edge 終止；edge 與 cloudflared 的
+# tunnel 另行加密。本範例 HTTP origin 只有同機 loopback 這一段。
+# Cloudflare 能在 edge 處理解密後內容；這不等於手機到 Pi 的端對端保密。

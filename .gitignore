@@ -1,0 +1,131 @@
+# 共用於 local-assistant 根目錄：backend / web / android。
+# 提交原始碼與設定範例；私人資料、金鑰、依賴與建置輸出留在本機。
+
+# 環境設定與敏感憑證
+.env
+.env.*
+*.env
+.envrc
+!.env.example
+.direnv/
+secrets/
+credentials/
+privatekeys/
+private_keys/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+
+# Cloudflare 本機設定／Tunnel 憑證；保留 *.example.* 範例
+.cloudflared/
+/deploy/pi/*.json
+!/deploy/pi/*.example.json
+/deploy/pi/cloudflared.yml
+/deploy/pi/cloudflared.local.yml
+/deploy/pi/config.yml
+tunnel-token.txt
+
+# 後端私人執行資料（自訂 DATA_DIR 時，另補實際路徑）
+/backend/runtime/
+/backend/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
+logs/
+/recordings/
+/backend/recordings/
+/exports/
+/backend/exports/
+/backups/
+/backend/backups/
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.ipynb_checkpoints/
+
+# 網頁／Node：目前 web 不需 npm install；仍預留常見工具規則
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.pnp.*
+*.tsbuildinfo
+.parcel-cache/
+.next/
+.nuxt/
+.svelte-kit/
+.vite/
+.cache/
+
+# 共用建置與測試輸出
+build/
+dist/
+out/
+coverage/
+
+# Android／Gradle；不要忽略 *.jar，wrapper JAR 必須提交
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+local.properties
+*.hprof
+*.apk
+*.aab
+*.ap_
+
+# 模型與發行壓縮包
+/models/
+.ollama/
+*.gguf
+*.safetensors
+*.zip
+*.7z
+*.tar.gz
+*.tgz
+*.manifest.json
+
+# IDE、作業系統與暫存
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# 不忽略 *.json / *.yml / *.jar：協定、範例和 Gradle wrapper 都是原始碼。

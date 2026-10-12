@@ -1,0 +1,8 @@
+{
+  "kind": "contacts.search",
+  "payload": {
+    "query": "媽媽",
+    "purpose": "dial"
+  },
+  "state": "pending_confirmation"
+}

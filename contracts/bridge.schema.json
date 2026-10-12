@@ -1,0 +1,307 @@
+{
+  "$defs": {
+    "BridgeActionResult": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "action_result",
+          "default": "action_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Action Id",
+          "type": "string"
+        },
+        "state": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "State",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "maxLength": 3000,
+          "title": "Message",
+          "type": "string"
+        },
+        "result": {
+          "additionalProperties": true,
+          "title": "Result",
+          "type": "object"
+        }
+      },
+      "required": [
+        "message_id",
+        "action_id",
+        "state"
+      ],
+      "title": "BridgeActionResult",
+      "type": "object"
+    },
+    "BridgeError": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "default": "",
+          "maxLength": 128,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BridgeErrorDetail"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "BridgeError",
+      "type": "object"
+    },
+    "BridgeErrorDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 3000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BridgeErrorDetail",
+      "type": "object"
+    },
+    "BridgeHello": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "title": "BridgeHello",
+      "type": "object"
+    },
+    "BridgeLoggedOut": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "logged_out",
+          "default": "logged_out",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "title": "BridgeLoggedOut",
+      "type": "object"
+    },
+    "BridgeLogout": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "logout",
+          "default": "logout",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "title": "BridgeLogout",
+      "type": "object"
+    },
+    "BridgeMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "execute_action",
+          "default": "execute_action",
+          "title": "Type",
+          "type": "string"
+        },
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Action Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "action_id"
+      ],
+      "title": "BridgeMessage",
+      "type": "object"
+    },
+    "BridgeReady": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "ready",
+          "default": "ready",
+          "title": "Type",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "uncertain_actions": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Uncertain Actions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "title": "BridgeReady",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "action_result": "#/$defs/BridgeActionResult",
+      "error": "#/$defs/BridgeError",
+      "execute_action": "#/$defs/BridgeMessage",
+      "hello": "#/$defs/BridgeHello",
+      "logged_out": "#/$defs/BridgeLoggedOut",
+      "logout": "#/$defs/BridgeLogout",
+      "ready": "#/$defs/BridgeReady"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/BridgeMessage"
+    },
+    {
+      "$ref": "#/$defs/BridgeHello"
+    },
+    {
+      "$ref": "#/$defs/BridgeReady"
+    },
+    {
+      "$ref": "#/$defs/BridgeActionResult"
+    },
+    {
+      "$ref": "#/$defs/BridgeLogout"
+    },
+    {
+      "$ref": "#/$defs/BridgeLoggedOut"
+    },
+    {
+      "$ref": "#/$defs/BridgeError"
+    }
+  ]
+}
