@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#0c635d">
   <meta name="description" content="由私人設備處理的個人助理。對話、筆記與錄音整理。">
   <title>留白 · 個人助理</title>
-  <link rel="icon" href="/assets/mark.svg?rev=web-v8" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/app.css?rev=web-v8">
-  <meta name="web-revision" content="web-v8">
-  <script type="module" src="/js/bootstrap.js?rev=web-v8"></script>
+  <link rel="icon" href="/assets/mark.svg?rev=web-v9" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css?rev=web-v9">
+  <meta name="web-revision" content="web-v9">
+  <script type="module" src="/js/bootstrap.js?rev=web-v9"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v8" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
+      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v9" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
       <div class="header-links"><button id="new-conversation" class="quiet-button" type="button" aria-label="開始新對話，保留已保存的筆記">新對話</button><button id="tools-toggle" class="quiet-button" type="button" aria-controls="tools-navigation" aria-expanded="false">其他工具</button><button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線</button></div>
     </header>
     <details id="account-panel" class="account-panel card"><summary id="account-summary">連線設定</summary>
@@ -31,9 +31,9 @@
       <button id="logout-button" class="secondary-button" type="button" hidden>登出網頁</button>
       <button id="connection-retry" class="secondary-button" type="button" hidden>重新建立登入</button>
       <p id="pair-message" class="form-message" role="status"></p>
-      <details id="connection-debug" class="voice-debug" hidden><summary>連線處理資訊</summary><dl><dt>APK 橋接</dt><dd id="connection-debug-native">尚未完成</dd><dt>網頁登入</dt><dd id="connection-debug-web">等待驗證</dd><dt>HTTP 狀態</dt><dd id="connection-debug-http">尚未取得</dd><dt>錯誤代碼</dt><dd id="connection-debug-code">尚未取得</dd><dt>HTTP 追蹤 ID</dt><dd id="connection-debug-trace">尚未取得</dd><dt>處理訊息</dt><dd id="connection-debug-error">尚無錯誤</dd></dl></details>
+      <details id="connection-debug" class="voice-debug" hidden><summary>連線處理資訊</summary><dl><dt>網頁版本</dt><dd id="connection-debug-version">web-v9</dd><dt>APK 橋接</dt><dd id="connection-debug-native">尚未完成</dd><dt>網頁登入</dt><dd id="connection-debug-web">等待驗證</dd><dt>目前階段</dt><dd id="connection-debug-stage">等待 APK 同步</dd><dt>HTTP 狀態</dt><dd id="connection-debug-http">尚未取得</dd><dt>錯誤代碼</dt><dd id="connection-debug-code">尚未取得</dd><dt>HTTP 追蹤 ID</dt><dd id="connection-debug-trace">尚未取得</dd><dt>處理訊息</dt><dd id="connection-debug-error">尚無錯誤</dd></dl></details>
     </details>
-    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v8">重新載入介面</a></section>
+    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v9">重新載入介面</a></section>
     <div id="connection-warning" class="notice" role="status" hidden>尚未連線。請先完成配對。</div>
     <nav id="tools-navigation" class="tabs" aria-label="其他工具" hidden>
       <button id="tab-voice" class="tab active" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="true">語音首頁</button>

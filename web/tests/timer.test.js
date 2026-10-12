@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {durationLabel,actionDetail} from '../js/state.js?rev=web-v8';
-import {VoiceFlow} from '../js/voice.js?rev=web-v8';
-import {Api} from '../js/api.js?rev=web-v8';
+import {durationLabel,actionDetail} from '../js/state.js?rev=web-v9';
+import {VoiceFlow} from '../js/voice.js?rev=web-v9';
+import {Api} from '../js/api.js?rev=web-v9';
 
 test('倒數計時秒數顯示為人類時長，不使用鬧鐘時刻或星期',()=>{assert.equal(durationLabel(180),'3 分鐘');assert.equal(durationLabel(3665),'1 小時 1 分鐘 5 秒');assert.equal(durationLabel(86400),'24 小時');assert.equal(durationLabel(1),'1 秒');assert.match(actionDetail({kind:'timer.create',payload:{duration_seconds:180,label:'泡茶'}}),/3 分鐘 · 泡茶/);assert.doesNotMatch(actionDetail({kind:'timer.create',payload:{duration_seconds:180}}),/星期|重複|03:00/);});
 test('倒數計時無效或超限值不偽造有效時間',()=>{for(const value of [0,-1,86401,1.5,'180',NaN])assert.equal(durationLabel(value),'時間待確認');});

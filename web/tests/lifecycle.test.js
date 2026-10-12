@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Actions} from '../js/actions.js?rev=web-v8';
-import {Notes} from '../js/notes.js?rev=web-v8';
-import {Chat} from '../js/chat.js?rev=web-v8';
-import {Recorder} from '../js/recorder.js?rev=web-v8';
+import {Actions} from '../js/actions.js?rev=web-v9';
+import {Notes} from '../js/notes.js?rev=web-v9';
+import {Chat} from '../js/chat.js?rev=web-v9';
+import {Recorder} from '../js/recorder.js?rev=web-v9';
 
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};}
 const textNode=()=>({textContent:'',classList:{toggle(){}}});

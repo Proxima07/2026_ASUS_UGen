@@ -1,8 +1,8 @@
-// @web-revision: web-v8
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v8';
-import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v8';
-import {uncertainResponse} from './conversation.js?rev=web-v8';
-export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v8';
+// @web-revision: web-v9
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v9';
+import {CaptureCoordinator,CaptureSession,NativeCaptureSession,stopTracks} from './capture.js?rev=web-v9';
+import {uncertainResponse} from './conversation.js?rev=web-v9';
+export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v9';
 
 const VOICE_BUSY=new Set(['requesting','recording','stopping','uploading','received_audio','queued','transcribing','transcribed','sending','received_request','understanding','dispatching','waiting','reading_result','sending_selection','selecting']);
 const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.create_native','notes.share']);
@@ -139,8 +139,8 @@ export class VoiceFlow {
 const STAGE_LABELS={idle:'準備好',requesting:'等待麥克風權限',recording:'收聽中',stopping:'錄音收尾中',uploading:'上傳錄音中',received_audio:'後端已收音訊',queued:'後端排隊中',transcribing:'STT 轉錄中',transcribed:'STT 轉錄完成',sending:'送出指令／等待 Agent',received_request:'指令編號已回覆',understanding:'Agent 理解中',dispatching:'交給手機',waiting:'等待手機確認',reading_result:'確認手機結果',sending_selection:'送出選擇',selecting:'請選擇對象',completed:'處理結果',clarify:'請補充資訊',paused:'流程已停止',failed:'未完成'};
 
 export class Voice {
-  constructor({api,bridge,capture,conversations=null,authenticated=()=>false,identity=()=>null,toast=()=>{},silenceOptions={}}){
-    Object.assign(this,{bridge,capture,authenticated,identity,toast,silenceOptions});
+  constructor({api,bridge,capture,conversations=null,authenticated=()=>false,identity=()=>null,authenticationMessage=()=> '請先完成連線配對。',toast=()=>{},silenceOptions={}}){
+    Object.assign(this,{bridge,capture,authenticated,identity,authenticationMessage,toast,silenceOptions});
     this.session=null;this.recorder=null;this.clockTimer=null;this.sampleTimer=null;this.limitTimer=null;this.startedAt=0;
     this.canRecord=Boolean(globalThis.NativeBridge?.postMessage||bridge.nativePresent||globalThis.MediaRecorder&&navigator.mediaDevices?.getUserMedia);
     this.button=document.querySelector('#voice-mic');this.stopButton=document.querySelector('#voice-stop');this.cancelButton=document.querySelector('#voice-cancel');
@@ -185,7 +185,7 @@ export class Voice {
   }
   renderChoices(kind,items){this.choices.replaceChildren();for(const item of items){const text=kind==='contact'?`${item.name||'未命名'} · ${item.phone_number||''}`:`${item.title||'未命名筆記'}${item.preview?` · ${item.preview}`:''}`;const button=element('button','voice-choice',text);button.type='button';button.addEventListener('click',()=>this.flow.choose(item.candidate_id));this.choices.append(button);}}
   async start(){
-    if(VOICE_BUSY.has(this.flow.state))return;if(!this.authenticated())return this.toast('請先完成連線配對。');
+    if(VOICE_BUSY.has(this.flow.state))return;if(!this.authenticated())return this.toast(this.authenticationMessage());
     const token=this.capture.acquire('voice');if(!token)return this.toast('另一段錄音正在進行，請先結束它。');
     let run,session;
     try{

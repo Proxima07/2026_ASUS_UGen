@@ -1,4 +1,4 @@
-// @web-revision: web-v8
+// @web-revision: web-v9
 export const STATUS_LABELS = Object.freeze({processing:'理解中',awaiting_device:'等待手機確認',needs_selection:'請選擇聯絡人',needs_clarification:'需要補充資訊',pending_confirmation:'等待確認',claimed:'手機正在處理',completed:'已完成',opened:'已開啟手機介面',handed_off:'已交給手機 App',cancelled:'已取消',permission_denied:'未取得權限',unsupported:'手機不支援',failed:'未完成',expired:'操作已逾時',execution_expired:'執行結果待查核',queued:'等待轉錄',transcribing:'正在轉錄',summarizing:'正在整理筆記',ready:'筆記草稿完成',transcribed:'逐字稿完成',interrupted:'處理已中斷'});
 export const ACTION_LABELS = Object.freeze({'contacts.search':'查找手機聯絡人','phone.dial':'開啟撥號介面','alarm.create':'設定手機鬧鐘','timer.create':'設定手機倒數計時','calendar.create':'新增手機日曆','notes.create_native':'開啟手機記事本','notes.save_local':'舊版 APK 加密筆記','notes.share':'分享至記事 App','notes.search_local':'查詢手機筆記','notes.update_local':'更新手機筆記'});
 export const ACTIVE_ACTION_STATES = new Set(['pending_confirmation','claimed']);

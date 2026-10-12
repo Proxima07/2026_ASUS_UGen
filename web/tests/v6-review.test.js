@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ConversationCoordinator} from '../js/conversation.js?rev=web-v8';
-import {Chat} from '../js/chat.js?rev=web-v8';
-import {Api,ApiError} from '../js/api.js?rev=web-v8';
-import {VoiceFlow} from '../js/voice.js?rev=web-v8';
-import {Actions} from '../js/actions.js?rev=web-v8';
+import {ConversationCoordinator} from '../js/conversation.js?rev=web-v9';
+import {Chat} from '../js/chat.js?rev=web-v9';
+import {Api,ApiError} from '../js/api.js?rev=web-v9';
+import {VoiceFlow} from '../js/voice.js?rev=web-v9';
+import {Actions} from '../js/actions.js?rev=web-v9';
 
 const accepted=(requestId='req_b10c9e70eac38f0db3af650f84b1c824',conversationId='conv_a190f1720b1bcc66fe17e6bf74b11c6f',status='completed')=>({
   request_id:requestId,conversation_id:conversationId,status

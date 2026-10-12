@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {mount,settle,deferred} from './dom-fixture.js';
-import {Api} from '../js/api.js?rev=web-v8';
+import {Api} from '../js/api.js?rev=web-v9';
 
 const identity={user_id:'user_A',device_id:'dev_A',label:'A',auth_kind:'session'};
 const response=(status,value,trace='http_fixture')=>({ok:status>=200&&status<300,status,headers:{get:key=>key==='X-Request-ID'?trace:null},json:async()=>value});
@@ -65,4 +65,92 @@ test('APK hello 逾時不無限等待；晚到 ready 不啟用舊身分，手動
 
 test('WebView API 網路錯誤與原生 Cookie 錯誤分開顯示，不自動重新配對',async()=>{
   const h=await nativeMount();try{h.me=()=>Promise.reject(new Error('private transport details'));await h.reply(h.sent[0]);assert.equal(h.sent.length,1);assert.match(h.document.querySelector('#connection-debug-error').textContent,/連線中斷/);assert.doesNotMatch(h.document.querySelector('#connection-debug-error').textContent,/private transport/);assert.equal(h.document.querySelector('#pair-form').hidden,true);await h.document.querySelector('#connection-retry').emit('click');await settle();await h.reply(h.sent[1],'error',{error:{code:'session_cookie_rejected',http_status:401,message:'WebView Cookie 未通過驗證'}});assert.match(h.document.querySelector('#connection-debug-error').textContent,/Cookie/);assert.equal(h.document.querySelector('#connection-debug-http').textContent,'HTTP 401');assert.equal(h.document.querySelector('#connection-retry').disabled,false);}finally{h.restore();}
+});
+
+test('Cookie 200 後錄音草稿清理失敗不再停在驗證中，顯示階段並停止全部私人操作',async()=>{
+  const h=await nativeMount(),logs=[],originalError=console.error;console.error=(...values)=>logs.push(values);
+  try{
+    const playback=h.document.querySelector('#record-playback'),remove=playback.removeAttribute;
+    playback.removeAttribute=()=>{throw new TypeError('private playback content must never enter logs');};
+    h.document.querySelector('#voice-transcript').textContent='上一個帳號的語音';
+    h.me=()=>response(200,identity,'http_cookie_proven');await h.reply(h.sent[0]);
+    assert.deepEqual(h.requests,['/v1/auth/me']);assert.equal(h.document.querySelector('#logout-button').hidden,true);
+    assert.equal(h.document.querySelector('#connection-debug-code').textContent,'login_state_reset_failed');
+    assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'清除舊錄音草稿');
+    assert.equal(h.document.querySelector('#connection-debug-http').textContent,'HTTP 200');
+    assert.equal(h.document.querySelector('#connection-debug-trace').textContent,'http_cookie_proven');
+    assert.equal(h.document.querySelector('#connection-debug').open,true);assert.equal(h.document.querySelector('main').hidden,true);
+    assert.equal(h.document.querySelector('#voice-transcript').textContent,'');
+    assert.doesNotMatch(JSON.stringify(logs),/private playback|上一個帳號/);
+    assert.deepEqual(logs[0],['[local-assistant login]',{phase:'clear_audio',code:'login_state_reset_failed'}]);
+    await h.document.querySelector('#voice-mic').emit('click');await settle();
+    assert.match(h.document.querySelector('#toast').textContent,/網頁登入驗證未完成/);assert.equal(h.sent.length,1);
+    playback.removeAttribute=remove;await h.document.querySelector('#connection-retry').emit('click');await settle();await h.reply(h.sent[1]);
+    assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');assert.equal(h.document.querySelector('main').hidden,false);
+  }finally{console.error=originalError;h.restore();}
+});
+
+test('一次清理中的多個 DOM 故障不阻止後續清理，未清空內容保持隱藏',async()=>{
+  const h=await nativeMount(),pending=deferred(),originalError=console.error;console.error=()=>{};
+  try{
+    h.me=()=>pending.promise;await h.reply(h.sent[0]);
+    const actions=h.document.querySelector('#action-area'),notes=h.document.querySelector('#notes-list'),playback=h.document.querySelector('#record-playback');let audioClears=0;
+    actions.replaceChildren=()=>{throw new Error('old action private body');};
+    const old=h.document.createElement('p');old.textContent='previous private note';notes.append(old);notes.replaceChildren=()=>{throw new Error('old note private body');};
+    playback.removeAttribute=()=>{audioClears++;throw new Error('old audio private body');};h.document.querySelector('#voice-transcript').textContent='old transcript';
+    pending.resolve(response(200,identity));await settle();
+    assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'清除舊操作');assert.ok(audioClears>=1);
+    assert.equal(h.document.querySelector('#voice-transcript').textContent,'');assert.ok(notes.children.includes(old));
+    assert.equal(h.document.querySelector('main').hidden,true);assert.equal(h.document.querySelector('main').inert,true);assert.deepEqual(h.requests,['/v1/auth/me']);
+  }finally{console.error=originalError;h.restore();}
+});
+
+test('ready 的附屬筆記 render 失敗在 Cookie probe 前也會顯示錯誤，可以人工恢復',async()=>{
+  const h=await nativeMount(),originalError=console.error;console.error=()=>{};
+  try{
+    const list=h.document.querySelector('#notes-list'),append=list.append;list.append=()=>{throw new Error('private render payload');};
+    await h.reply(h.sent[0]);assert.deepEqual(h.requests,[]);assert.equal(h.document.querySelector('#connection-debug-code').textContent,'login_ui_failed');
+    assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'更新 APK 連線介面');assert.equal(h.document.querySelector('#connection-debug').open,true);
+    assert.doesNotMatch(h.document.querySelector('#pair-message').textContent,/private render/);
+    list.append=append;await h.document.querySelector('#connection-retry').emit('click');await settle();await h.reply(h.sent[1]);
+    assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');
+  }finally{console.error=originalError;h.restore();}
+});
+
+test('Cookie transport 不回覆且忽略 abort 時，獨立 20 秒期限停止等待；晚到 200 不授權',async()=>{
+  const h=await nativeMount(),old=deferred(),originalError=console.error;console.error=()=>{};
+  try{
+    h.me=()=>old.promise;await h.reply(h.sent[0]);assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'網頁 Cookie API 驗證');
+    const watchdog=[...h.timers.values()].find(timer=>timer.ms===20000);assert.ok(watchdog);watchdog.fn();await settle();
+    assert.equal(h.document.querySelector('#connection-debug-code').textContent,'web_session_timeout');assert.match(h.document.querySelector('#pair-message').textContent,/20 秒/);
+    old.resolve(response(200,identity));await settle();assert.equal(h.document.querySelector('#logout-button').hidden,true);assert.deepEqual(h.requests,['/v1/auth/me']);
+    await h.document.querySelector('#connection-retry').emit('click');await settle();h.me=()=>response(200,identity);await h.reply(h.sent[1]);
+    assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');
+  }finally{console.error=originalError;h.restore();}
+});
+
+test('登入成功提交介面出錯也撤銷已指定的身分，不吞自己的 generation 轉換',async()=>{
+  const h=await nativeMount(),originalError=console.error;console.error=()=>{};
+  try{
+    const toggle=h.document.querySelector('#account-toggle'),set=toggle.setAttribute;
+    toggle.setAttribute=function(key,value){if(value==='false')throw new Error('private commit details');return set.call(this,key,value);};
+    await h.reply(h.sent[0]);assert.equal(h.document.querySelector('#connection-debug-code').textContent,'login_ui_failed');
+    assert.equal(h.document.querySelector('#connection-debug-stage').textContent,'啟用已核對登入');assert.equal(h.document.querySelector('#connection-debug-http').textContent,'HTTP 200');
+    assert.equal(h.document.querySelector('#logout-button').hidden,true);assert.deepEqual(h.requests,['/v1/auth/me']);
+    assert.doesNotMatch(h.document.querySelector('#pair-message').textContent,/private commit/);
+    await h.document.querySelector('#voice-mic').emit('click');await settle();assert.equal(h.sent.length,1);
+  }finally{console.error=originalError;h.restore();}
+});
+
+test('已有登入的 401 遇上清理故障先撤銷權限，不保留舊帳號或重新執行手機操作',async()=>{
+  const h=await nativeMount(),originalError=console.error;console.error=()=>{};
+  try{
+    await h.reply(h.sent[0]);assert.equal(h.document.querySelector('#session-description').textContent,'已連接 · A');
+    h.document.querySelector('#record-playback').removeAttribute=()=>{throw new Error('private old session');};
+    h.actions=()=>response(401,{error:{code:'unauthorized',message:'未登入'}});
+    for(const timer of [...h.intervals.values()])timer.fn();await settle();
+    assert.equal(h.document.querySelector('#logout-button').hidden,true);assert.equal(h.document.querySelector('main').hidden,true);
+    assert.equal(h.document.querySelector('#connection-debug-code').textContent,'login_state_reset_failed');
+    await h.document.querySelector('#voice-mic').emit('click');await settle();assert.equal(h.sent.length,1);
+  }finally{console.error=originalError;h.restore();}
 });

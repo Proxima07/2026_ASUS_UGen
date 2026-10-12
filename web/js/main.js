@@ -1,13 +1,13 @@
-// @web-revision: web-v8
-import {Api} from './api.js?rev=web-v8';
-import {Bridge} from './bridge.js?rev=web-v8';
-import {Actions} from './actions.js?rev=web-v8';
-import {Chat} from './chat.js?rev=web-v8';
-import {Notes} from './notes.js?rev=web-v8';
-import {Recorder} from './recorder.js?rev=web-v8';
-import {Voice,CaptureCoordinator} from './voice.js?rev=web-v8';
-import {errorMessage,setMessage} from './state.js?rev=web-v8';
-import {ConversationCoordinator} from './conversation.js?rev=web-v8';
+// @web-revision: web-v9
+import {Api} from './api.js?rev=web-v9';
+import {Bridge} from './bridge.js?rev=web-v9';
+import {Actions} from './actions.js?rev=web-v9';
+import {Chat} from './chat.js?rev=web-v9';
+import {Notes} from './notes.js?rev=web-v9';
+import {Recorder} from './recorder.js?rev=web-v9';
+import {Voice,CaptureCoordinator} from './voice.js?rev=web-v9';
+import {errorMessage,setMessage} from './state.js?rev=web-v9';
+import {ConversationCoordinator} from './conversation.js?rev=web-v9';
 
 let identity=null, checking=false, checkAgain=false, loggingOut=false, authGeneration=0, toastTimer, voice=null, connectionIssue=null, nativeRenewals=0;
 const capture=new CaptureCoordinator();
@@ -18,6 +18,8 @@ const pairMessage=document.querySelector('#pair-message');
 const warning=document.querySelector('#connection-warning');
 const logout=document.querySelector('#logout-button');
 const authenticated=()=>Boolean(identity)&&!loggingOut;
+const LOGIN_STAGES={cookie_probe:'網頁 Cookie API 驗證',validate_identity:'核對手機與網頁身分',invalidate_api:'停止舊 API 請求',clear_conversation:'清除舊對話編號',clear_bridge:'停止舊手機操作',clear_actions:'清除舊操作',clear_chat:'清除舊文字對話',clear_notes:'清除舊平台筆記',clear_audio:'清除舊錄音草稿',clear_voice:'清除舊語音指令',bind_session:'啟用已核對登入',bridge_ready:'更新 APK 連線介面',ready:'登入完成'};
+function loginError(stage,code){console.error('[local-assistant login]',{phase:stage,code});return {phase:'web_failed',stage,code,message:'登入驗證的介面處理未完成，手機操作已暫停。請按「重新建立登入」；若仍失敗，請重新載入完整網頁更新。'};}
 function toast(message){const node=document.querySelector('#toast');node.textContent=message;node.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{node.hidden=true;},4500);}
 function openAccount(value=true){account.open=value;document.querySelector('#account-toggle').setAttribute('aria-expanded',String(value));}
 function tab(name){if(name!=='voice'&&voice?.isBusy())voice.interrupt('已暫停語音。回到首頁後，可以重新說一次。');document.querySelector('#tools-navigation').hidden=name==='voice';document.querySelector('#tools-toggle').textContent=name==='voice'?'其他工具':'返回語音';document.querySelector('#tools-toggle').setAttribute('aria-expanded',String(name!=='voice'));for(const button of document.querySelectorAll('[data-tab]')){const selected=button.dataset.tab===name;button.classList.toggle('active',selected);button.setAttribute('aria-selected',String(selected));}for(const panel of document.querySelectorAll('.tab-panel'))panel.hidden=panel.id!==`panel-${name}`;if(name==='notes'&&authenticated())notes.load();}
@@ -43,28 +45,46 @@ function updateAccount(){
   const retry=document.querySelector('#connection-retry');if(retry){retry.hidden=authenticated()||!native&&!connectionIssue;retry.disabled=native?Boolean(bridge.helloMessageId):checking;retry.textContent=native?'重新建立登入':'重新檢查登入';}
   warning.hidden=authenticated();warning.textContent=notice;
   const debug=document.querySelector('#connection-debug');
-  if(debug){debug.hidden=!native&&!connectionIssue;const fields={native:native?(paired?'APK 身分已核對':bridge.ready?'橋接已回覆，但未提供完整身分':'尚未完成橋接'):'一般瀏覽器',web:authenticated()?'Cookie 驗證成功':phase==='web_unauthorized'?'Cookie 未授權':phase==='identity_mismatch'?'身分不一致':phase==='native_failed'?'等待 APK 同步完成':phase==='web_failed'?'驗證失敗':'等待驗證',http:connectionIssue?.status?`HTTP ${connectionIssue.status}`:'尚未取得',code:connectionIssue?.code||'尚未取得',trace:connectionIssue?.httpRequestId||'尚未取得',error:connectionIssue?.message||connectionIssue?.code||'尚無錯誤'};for(const [key,value]of Object.entries(fields)){const node=document.querySelector(`#connection-debug-${key}`);if(node)node.textContent=String(value).slice(0,500);}}
+  if(debug){debug.hidden=!native&&!connectionIssue;if(connectionIssue&&phase!=='web_checking'&&phase!=='connected'&&phase!=='renewing_native')debug.open=true;const fields={version:'web-v9',native:native?(paired?'APK 身分已核對':bridge.ready?'橋接已回覆，但未提供完整身分':'尚未完成橋接'):'一般瀏覽器',web:authenticated()?'Cookie 驗證成功':phase==='web_unauthorized'?'Cookie 未授權':phase==='identity_mismatch'?'身分不一致':phase==='native_failed'?'等待 APK 同步完成':phase==='web_failed'?'驗證失敗':'等待驗證',stage:LOGIN_STAGES[connectionIssue?.stage]||'等待 APK 同步',http:connectionIssue?.status?`HTTP ${connectionIssue.status}`:'尚未取得',code:connectionIssue?.code||'尚未取得',trace:connectionIssue?.httpRequestId||'尚未取得',error:connectionIssue?.message||connectionIssue?.code||'尚無錯誤'};for(const [key,value]of Object.entries(fields)){const node=document.querySelector(`#connection-debug-${key}`);if(node)node.textContent=String(value).slice(0,500);}}
   if(location.protocol!=='https:'){warning.hidden=false;warning.textContent='請使用 HTTPS 網址。登入 Cookie 與麥克風需要安全連線。';}
 }
-function clearPrivateState(message){api.invalidateSession();conversations.reset();authGeneration++;actions.stop();chat.clear();notes.clear();recorder.clear();voice?.clear(message);bridge.clearPrivateOperations();}
-function signedOut(issue=null){connectionIssue=issue;clearPrivateState();loggingOut=false;document.querySelector('main').inert=false;identity=null;updateAccount();openAccount();}
+function clearPrivateState(message){
+  // Revoke execution permission before touching any DOM. Every owner must be
+  // cleared even if one UI cleanup fails; a failed reset cannot authorize a
+  // replacement account or leave old private content visible.
+  authGeneration++;identity=null;bridge.bindSession(null);let failure=null;
+  for(const [stage,reset]of [
+    ['invalidate_api',()=>api.invalidateSession()],['clear_conversation',()=>conversations.reset()],
+    ['clear_bridge',()=>bridge.clearPrivateOperations()],['clear_actions',()=>actions.stop()],
+    ['clear_chat',()=>chat.clear()],['clear_notes',()=>notes.clear()],
+    ['clear_audio',()=>recorder.clear()],['clear_voice',()=>voice?.clear(message)],
+  ]){try{reset();}catch{const issue=loginError(stage,'login_state_reset_failed');if(!failure)failure=issue;}}
+  if(failure){const main=document.querySelector('main');main.inert=true;main.hidden=true;}
+  return failure;
+}
+function signedOut(issue=null){const failure=clearPrivateState();connectionIssue=issue||failure;loggingOut=false;const main=document.querySelector('main');main.inert=Boolean(failure);main.hidden=Boolean(failure);updateAccount();openAccount();}
 function recoverNativeSession(manual=false){
   if(!bridge.nativePresent)return verifySession();if(bridge.helloMessageId)return;if(!manual&&nativeRenewals>=1)return;nativeRenewals=1;
-  clearPrivateState('正在重新建立網頁登入，請稍候。');identity=null;connectionIssue={phase:'renewing_native'};updateAccount();
+  const failure=clearPrivateState('正在重新建立網頁登入，請稍候。');if(failure){connectionIssue=failure;updateAccount();openAccount();return;}connectionIssue={phase:'renewing_native'};updateAccount();
   try{bridge.refreshSession();}catch(error){connectionIssue={phase:'native_failed',message:errorMessage(error)};updateAccount();openAccount();}
 }
 const api=new Api({onUnauthorized:error=>{if(identity){signedOut({phase:'web_unauthorized',...error});if(bridge.nativePresent)recoverNativeSession();}}});
-const bridge=new Bridge({onChange:()=>{if(identity&&bridge.identity&&(identity.user_id!==bridge.identity.user_id||identity.device_id!==bridge.identity.device_id)){clearPrivateState('手機登入身分已更新，正在重新核對。');identity=null;}updateAccount();actions.render();notes.render();if(bridge.ready)verifySession();},onResult:value=>{if(authenticated()){voice?.flow.nativeResult(value).catch(e=>toast(errorMessage(e)));actions.nativeResult(value).catch(e=>toast(errorMessage(e)));}},onError:(message,value)=>{if(value?.request_type==='hello'){connectionIssue={phase:value.error?.code==='native_device_revoked'?'native_revoked':'native_failed',message,code:value.error?.code,status:value.error?.http_status||null,httpRequestId:value.error?.http_request_id||null};updateAccount();openAccount();}if(value?.request_type==='logout'){loggingOut=false;document.querySelector('main').inert=false;updateAccount();}voice?.flow.nativeError(value,message);toast(message);if(authenticated()){actions.busy.clear();actions.refresh().catch(()=>{});}},onLogout:signedOut});
+const bridge=new Bridge({onChange:()=>{try{if(identity&&bridge.identity&&(identity.user_id!==bridge.identity.user_id||identity.device_id!==bridge.identity.device_id)){const failure=clearPrivateState('手機登入身分已更新，正在重新核對。');if(failure){connectionIssue=failure;updateAccount();openAccount();return;}}updateAccount();actions.render();notes.render();if(bridge.ready)verifySession();}catch{signedOut(loginError('bridge_ready','login_ui_failed'));}},onResult:value=>{if(authenticated()){voice?.flow.nativeResult(value).catch(e=>toast(errorMessage(e)));actions.nativeResult(value).catch(e=>toast(errorMessage(e)));}},onError:(message,value)=>{if(value?.request_type==='hello'){connectionIssue={phase:value.error?.code==='native_device_revoked'?'native_revoked':'native_failed',message,code:value.error?.code,status:value.error?.http_status||null,httpRequestId:value.error?.http_request_id||null};updateAccount();openAccount();}if(value?.request_type==='logout'){loggingOut=false;document.querySelector('main').inert=false;updateAccount();}voice?.flow.nativeError(value,message);toast(message);if(authenticated()){actions.busy.clear();actions.refresh().catch(()=>{});}},onLogout:signedOut});
 const actions=new Actions({api,bridge,container:document.querySelector('#action-area'),isRequestVisible:id=>conversations.ownsRequest(id),onRequest:record=>chat.update(record),toast});
 const notes=new Notes({api,bridge,actions,authenticated,toast});
 const chat=new Chat({api,bridge,actions,conversations,authenticated,onNotesChanged:()=>notes.load(),toast});
 const recorder=new Recorder({api,bridge,actions,capture,authenticated,onSaved:()=>notes.load(),onTranscript:text=>{if(!text.trim())return toast('逐字稿還沒有內容。');if(text.length>8000)return toast('逐字稿超過對話上限，請先縮短內容。');tab('chat');chat.fill(text);toast('已帶入對話，你可以修正後送出。');},toast});
-voice=new Voice({api,bridge,capture,conversations,authenticated,identity:()=>identity,toast});
+voice=new Voice({api,bridge,capture,conversations,authenticated,identity:()=>identity,authenticationMessage:()=>warning.textContent,toast});
 
 async function verifySession(){
-  if(loggingOut)return;if(bridge.nativePresent&&!bridge.ready){updateAccount();return;}if(checking){checkAgain=true;return;}checking=true;const generation=authGeneration;
+  if(loggingOut)return;if(bridge.nativePresent&&!bridge.ready){updateAccount();return;}if(checking){checkAgain=true;return;}checking=true;let generation=authGeneration,stage='cookie_probe',checked=null,probeTimer;
   try{
-    const checked=await api.me();if(generation!==authGeneration||loggingOut)return;
+    connectionIssue={phase:'web_checking',stage};updateAccount();
+    // The API has its own abort deadline. This independent deadline also
+    // closes the coordinator when a transport ignores abort or never settles.
+    checked=await Promise.race([api.me(),new Promise((_,reject)=>{probeTimer=setTimeout(()=>reject({code:'web_session_timeout',message:'網頁登入驗證超過 20 秒，已停止等待。請按「重新建立登入」再試。'}),20000);})]);
+    clearTimeout(probeTimer);probeTimer=null;if(generation!==authGeneration||loggingOut)return;
+    stage='validate_identity';connectionIssue={phase:'web_checking',stage,status:200,httpRequestId:checked?.http_request_id};updateAccount();
     if(!checked.user_id||!checked.device_id)throw new Error('後端沒有回傳完整的登入身分。');
     if(bridge.nativePresent&&(!bridge.identity?.user_id||!bridge.identity?.device_id||checked.user_id!==bridge.identity.user_id||checked.device_id!==bridge.identity.device_id)){
       signedOut({phase:'identity_mismatch',code:'session_identity_mismatch',status:200,httpRequestId:checked.http_request_id});return;
@@ -72,13 +92,22 @@ async function verifySession(){
     if(bridge.nativePresent&&checked.auth_kind!=='session'){
       signedOut({phase:'web_failed',code:'cookie_session_required',status:200,httpRequestId:checked.http_request_id,message:'API 回覆成功，但不是 Cookie session 登入。請檢查代理設定。'});return;
     }
-    if(!identity||identity.user_id!==checked.user_id||identity.device_id!==checked.device_id)clearPrivateState('登入身分已更新，請重新開始這次指令。');
-    connectionIssue=null;identity=checked;bridge.bindSession(checked);updateAccount();openAccount(false);await Promise.allSettled([actions.start(),notes.load()]);
+    if(!identity||identity.user_id!==checked.user_id||identity.device_id!==checked.device_id){
+      const failure=clearPrivateState('登入身分已更新，請重新開始這次指令。');
+      // This generation belongs to our own reset, not a superseding login.
+      // Errors after it must be reported rather than treated as stale replies.
+      generation=authGeneration;if(failure)throw failure;
+    }
+    stage='bind_session';bridge.bindSession(checked);identity=checked;connectionIssue={phase:'connected',stage:'ready',status:200,httpRequestId:checked.http_request_id};updateAccount();openAccount(false);const main=document.querySelector('main');main.inert=false;main.hidden=false;await Promise.allSettled([actions.start(),notes.load()]);
   }catch(error){
     if(generation!==authGeneration)return;
-    signedOut({phase:error.status===401?'web_unauthorized':'web_failed',status:error.status||null,httpRequestId:error.httpRequestId||null,code:error.code,message:error.status===401?'網頁 Cookie 未通過登入驗證。':errorMessage(error)});
-    if(error.status===401&&bridge.nativePresent)recoverNativeSession();else if(error.status!==401)setMessage(pairMessage,errorMessage(error),true);
-  }finally{checking=false;updateAccount();if(checkAgain){checkAgain=false;verifySession();}}
+    let issue;
+    if(error.code==='login_state_reset_failed')issue={...error,status:200,httpRequestId:checked?.http_request_id};
+    else if(stage!=='cookie_probe')issue={...loginError(stage,'login_ui_failed'),status:200,httpRequestId:checked?.http_request_id};
+    else{console.error('[local-assistant login]',{phase:stage,code:error.code||'web_probe_failed'});issue={phase:error.status===401?'web_unauthorized':'web_failed',stage,status:error.status||null,httpRequestId:error.httpRequestId||null,code:error.code,message:error.status===401?'網頁 Cookie 未通過登入驗證。':errorMessage(error)};}
+    signedOut(issue);
+    if(error.status===401&&bridge.nativePresent)recoverNativeSession();else if(error.status!==401)setMessage(pairMessage,issue.message,true);
+  }finally{clearTimeout(probeTimer);checking=false;updateAccount();if(checkAgain){checkAgain=false;verifySession();}}
 }
 document.querySelector('#connection-retry')?.addEventListener('click',()=>{if(bridge.nativePresent)recoverNativeSession(true);else verifySession();});
 for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>tab(button.dataset.tab));

@@ -1,13 +1,16 @@
-# web_v8 功能與驗證狀態
+# web_v9 功能與驗證狀態
 
 更新：2026-10-12。搭配 backend_v6／android_v6。
 
 | 項目 | 程式狀態 | 實際界線 |
 |---|---|---|
+| 登入後清理失敗 | 同次登入例外不再誤當過期回覆忽略，撤銷權限並嘗試全部清理 | 清理失敗隱藏私人主畫面；成功清理／核對才能恢復 |
+| 網頁登入進度與期限 | 核對、清理與啟用身分分階段追蹤，/me驗證20秒等待上限 | 逾時web_session_timeout；原API期限15秒；重試不重播操作 |
 | APK登入握手 | 等hello ready後才首次/me | 60秒期限，不並行提前驗證 |
 | Cookie與身分驗證 | auth_kind=session且user/device與APK一致 | 不一致不得載入私人資料或執行操作 |
 | Cookie401恢復 | 每頁最多一次自動hello，另有手動重新建立登入 | 成功不重設自動預算；不重兌換配對碼 |
-| 分階段診斷 | APK、網頁、HTTP、安全錯誤碼與request ID | 原生裝置確認失效才稱配對失效 |
+| 分階段診斷 | 前端版本、APK、網頁處理階段、HTTP、安全錯誤碼與request ID | 失敗自動展開；HTTP200後前端失敗仍保留200，不顯示憑證／私人內容 |
+| 麥克風未授權提示 | 使用目前連線警告 | 不把所有網頁失敗當成尚未配對 |
 | APK原生錄音首頁 | 優先使用受信任原生橋接 | 需要android_v6與身分一致握手 |
 | 收聽中／時鐘／音量 | 真實開始後呈現，獨立計時 | 不等待WebAudio才啟動時間 |
 | 紅色停止／取消 | 可手動結束、捨棄未送出的音訊 | 等待／收尾中的主麥克風可取消 |
@@ -19,21 +22,25 @@
 | 平台備忘錄 | 顯式選用，依user＋device隔離 | 伺服器權限檢查，前端清理防舊畫面殘留 |
 | 身分切換／遲到回覆 | 清私人畫面與請求epoch | 舊回覆不得恢復前一身分資料 |
 | 多輪對話／倒數 | 保留v6 | 依確切頁面conversation/head；原生確認保留 |
-| 載入完整性 | web-v8各runtime版本一致 | 缺檔／混版有明確路徑提示 |
+| 載入完整性 | web-v9各runtime版本一致 | 缺檔／混版有明確路徑提示 |
 | 真實手機與公開站台 | 尚未驗收 | Node／mock測試不是麥克風硬體結果 |
 
 ## 驗證紀錄
 
-全部134項Node測試通過，包含7項新增登入同步回歸：完整HTML的原生hello、延後/me、嚴格Cookie身分、每頁一次401恢復、手動重試合併、60秒期限與遲到舊401丟棄。原有語法／DOM／資源、錄音與筆記隔離測試保留。本地模擬不能確認截圖手機的實際Cookie／代理問題，尚未目標手機驗收。
+全部140項Node測試通過，包含6項本次新增回歸與原有134項測試。新增案例涵蓋登入清理失敗及網頁驗證停住；原有完整HTML原生hello、延後/me、嚴格Cookie身分、每頁一次401恢復、手動重試合併、60秒握手期限與遲到舊401丟棄等回歸保留。
 
-本地backend_v6 TestClient驗證：Bearer /me回device，Cookie-only /me回同身分session；他人Cookie會回不同ID，無效Cookie401附有效X-Request-ID。Bearer A與Cookie B同時送出時採A，重現Cookie驗證不可附Bearer。全部13個web-v8執行資源200；這是本地API／檔案整合，不是公開hostname或手機WebView測試。
+本次使用隨專案提供的HTML、Node DOM模擬及故障注入驗證，另經獨立程式審查；尚未在真實Chromium、WebView、目標手機或公開站台完成驗收。
+
+本地故障注入確認：web_v8 的登入驗證自行更新 authGeneration 後，清理例外會被 catch 誤判成過期請求，留下 identity=null、無connectionIssue與「核對中」。這是可重現程式缺陷，不代表已確認目標手機實際失敗元件。最新截圖只能確認 APK 的 Bearer／Cookie 後端驗證均 HTTP200且身分一致，網站尚未完成自己的登入狀態切換。
+
+上一版的本地backend_v6 TestClient驗證：Bearer /me回device，Cookie-only /me回同身分session；他人Cookie會回不同ID，無效Cookie401附有效X-Request-ID。Bearer A與Cookie B同時送出時採A，重現Cookie驗證不可附Bearer；當時13個web-v8執行資源200。這是本地API／檔案整合，不是公開hostname或手機WebView測試。
 
 ## 本次登入驗收
 
-1. 更新web_v8與android_v6，原backend_v6、.env、runtime與cloudflared保留。
+1. 在web_v8上覆蓋web_v9，保留android_v6、backend_v6、.env、runtime與cloudflared；不需重新配對、清App資料或清快取。
 2. 已配對手機重開後先看到登入核對；只有Cookie與APK同身分才顯示已連接。
 3. 網頁401至多自動同步一次；手動「重新建立登入」可再試，不再輸入已用配對碼。
-4. Cookie或代理失敗顯示具體階段；原生憑證失效與網頁Cookie失效區別呈現。
+4. Cookie、代理、頁面清理或登入啟用失敗顯示具體階段；原生憑證失效與網頁失敗區別呈現，不留無期限核對中。
 5. 兩個不同裝置身分不可誤載私人資料；同步後不重播舊指令。
 
 ## 既有功能驗收
@@ -46,4 +53,4 @@
 6. 使用兩組配對裝置驗證平台筆記不可互看，重新登入／切身分不留舊內容。
 7. 一般Chrome完整Blob錄音、草稿明確平台保存與原生匯出分別驗收。
 
-尚未完善：特定廠牌預設記事本整合、通用讀取／更新、跨頁永久對話UI、互動式Cloudflare Access、應用層端對端加密。詳細說明見 docs/web_v8.md。
+尚未完善：目標手機本次登入狀態驗收、特定廠牌預設記事本整合、通用讀取／更新、跨頁永久對話UI、互動式Cloudflare Access、應用層端對端加密。詳細說明見 docs/web_v9.md。

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {VoiceFlow} from '../js/voice.js?rev=web-v8';
-import {CaptureCoordinator,CaptureSession} from '../js/capture.js?rev=web-v8';
+import {VoiceFlow} from '../js/voice.js?rev=web-v9';
+import {CaptureCoordinator,CaptureSession} from '../js/capture.js?rev=web-v9';
 
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};}
 test('音訊 202 queued 不宣稱 STT 已開始，只有 job.status 才推進階段',async()=>{

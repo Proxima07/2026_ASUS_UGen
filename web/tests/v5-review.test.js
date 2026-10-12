@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CaptureCoordinator,CaptureSession} from '../js/capture.js?rev=web-v8';
-import {Voice} from '../js/voice.js?rev=web-v8';
-import {Recorder} from '../js/recorder.js?rev=web-v8';
+import {CaptureCoordinator,CaptureSession} from '../js/capture.js?rev=web-v9';
+import {Voice} from '../js/voice.js?rev=web-v9';
+import {Recorder} from '../js/recorder.js?rev=web-v9';
 
 function recording({stopThrows=false,synchronousStop=false}={}){
   const handlers=new Map();
