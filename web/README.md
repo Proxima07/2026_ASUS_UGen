@@ -1,17 +1,17 @@
-# 網頁子項目 web_v3
+# 網頁子項目 web_v4
 
-版本：3。更新日期：2026-10-12。
+版本：4。更新日期：2026-10-12。
 
-web_v3 為語音優先版本；在既有 web_v1／web_v2 上覆蓋本次更新。保留 v2 的原生 fetch 綁定修正，不需要重新安裝前端依賴。首頁只有主要麥克風、辨識文字與助理回覆／狀態；文字、筆記與音檔工具收進「其他工具」。
+web_v4 修正前端載入失敗時連線介面也無法使用的問題；相對 web_v3 提供更新。保留 v3 語音首頁與 v2 的原生 fetch 綁定修正，不需要重新安裝前端依賴。首頁只有主要麥克風、辨識文字與助理回覆／狀態；文字、筆記與音檔工具收進「其他工具」。
 
 這份網頁是手機優先的個人助理介面，包含對話、筆記、錄音整理。所有資源隨檔案提供，不使用 CDN、第三方分析、雲端語音辨識或瀏覽器 Web Speech API。文字、逐字稿與模型回覆均以 `textContent` 顯示。
 
 ## 安裝與開啟
 
-1. 將 `web_v1.zip` 解壓至專案上層，得到 `local-assistant/web/`，與既有 `backend/` 並列。
+1. 將 `web_v1.zip` 解壓至專案上層，得到 `local-assistant/web/`，與既有 `backend/` 並列。後續差異包依序覆蓋至 web_v4；ZIP 裡已有 local-assistant 外層，解壓到現有 local-assistant 的上一層。
 2. 在既有後端上依序套用更新至 `backend_v3.zip`。v3 新增語音指令專用轉錄與手機優先筆記路由；本版 /chat 新欄位需要 v3，不能只搭配 backend_v1 或 v2。APK 請使用本次支援手機筆記查詢／修改的版本；舊 APK 無相應能力時，後端會明確退回私人中樞筆記。
 3. 設定後端 `.env` 的 `PUBLIC_BASE_URL=https://你的子網域`。後端由此推導允許的來源與主機名稱。`WEB_DIR` 預設指向與 backend 並列的 web；自訂時填這個目錄的絕對路徑。
-4. 完整關閉後重新啟動後端。後端在啟動時偵測 `index.html`；只解壓、不重啟，既有程序不會自動掛載網站。
+4. 更改 .env／WEB_DIR 或首次加入網站後，完整關閉並重新啟動後端。已掛載的 web 目錄內新增檔案能直接供應；重啟不能修復放錯資料夾的檔案。
 5. 使用你既有的 cloudflared 即可，不必套用專案的 Tunnel 範例或建立第二份 connector。該子網域指向同一個 FastAPI 服務；網頁、`/v1/*` 與 API 必須同來源，整個 hostname 轉到後端。
 6. 用 `https://你的子網域/` 開啟。一般瀏覽器輸入管理者產生的一次性配對碼；APK 先在原生連線頁配對，由 APK 注入 HttpOnly Cookie 後載入網頁。
 
@@ -92,11 +92,11 @@ cd local-assistant/web
 node --test tests/*.test.js
 ```
 
-21 項 Node 內建測試已通過，不需要套件下載，涵蓋瀏覽器 fetch 接收者、API、原生握手、音訊限制、狀態誠實顯示、登出與遲到回應。模擬測試不代表已驗證真機麥克風、通訊錄、日曆、鬧鐘或 Cloudflare 網域。
+當前 50 項 Node 內建測試已通過，不需要套件下載，涵蓋瀏覽器 fetch 接收者、API、原生握手、語音生命週期、音訊限制、登出與遲到回應，以及缺檔／錯誤 MIME／混版阻擋、安全停用與完整模組依賴圖。本地後端也已確認首頁與 11 個帶 revision 的執行資源正常供應。模擬及本地整合測試不代表已驗證真機麥克風、手機操作或公開 Cloudflare 網域。
 
 ## 已有 Tunnel 的連線排錯
 
-1. 覆蓋 web_v2 後，用 Ctrl+Shift+R 強制重新整理；DevTools 開啟時可先勾 Disable cache。
+1. 覆蓋 web_v4 後，用 Ctrl+Shift+R 強制重新整理；DevTools 開啟時可先勾 Disable cache。
 2. 開啟 `https://你的實際子網域/health`，預期是後端 JSON 且 status=ok；健康檢查不會呼叫模型。
 3. 開啟同網域 `/v1/auth/me`：未配對時應是 401 JSON，表示 API 已到達；登入後應是 200 JSON。
 4. 若仍顯示 network_error，在 Network 選 Fetch/XHR，檢查上述 API 的狀態。301／302／307／308 會被本版禁止重新導向政策拒絕；需修正原始網址／規則，或依部署需求正式整合 Access，不以放寬程式限制代替修正。
@@ -107,5 +107,15 @@ node --test tests/*.test.js
 專案沒有呼叫 Chrome LanguageDetector；其他腳本的 Built-In AI 提示不是這個本地 LLM 的設定。來源需查看 DevTools 的腳本 URL，不能僅依 content_main.js 檔名判定是哪個擴充套件。
 
 官方參考：[Cloudflare Web Analytics 設定](https://developers.cloudflare.com/web-analytics/get-started/)、[Web IDL operation 接收者規則](https://webidl.spec.whatwg.org/#es-operations)。
+
+## web_v4 載入診斷與 404
+
+麥克風圖示直接放在 HTML，無須另外下載 microphone.svg。獨立 bootstrap 先檢查 CSS、全部執行時 JavaScript 的 HTTP 狀態、MIME 與 web-v4 版本標記，再啟動助理；所有模組使用同一 revision 查詢，避免新舊檔混用。
+
+載入不完整時，頁面列出缺少／版本不符的路徑，保留原生「連線設定」展開與重新載入入口。配對與功能在完整啟動前維持停用；不會以預設表單提交配對碼，也不會因檔案檢查呼叫模型或手機操作。重試使用整頁重新載入。
+
+若 bootstrap 本身也缺檔／被阻擋，HTML 仍顯示未完成提示與可展開的設定；此情況無法列出詳細 HTTP 狀態，需確認實際檔案位置。
+
+交付的 web_v3.zip 有 voice.js 與 microphone.svg。兩者在公開站台 404 時，優先確認後端實際 WEB_DIR 與解壓位置，接著比較本機與公開網址。新網域 `https://2026-asus-ugen.aphelion.tw` 對應設定、檢查指令與排錯順序見 `docs/web_v4.md`。本次不需要修改後端或 APK，也不必更換既有 cloudflared 配置。
 
 實機驗收與尚未完善項目見 `STATUS.md`，版本更新見 `CHANGELOG.md`。

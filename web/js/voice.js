@@ -1,4 +1,5 @@
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js';
+// @web-revision: web-v4
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v4';
 
 const VOICE_BUSY=new Set(['requesting','recording','uploading','transcribing','understanding','dispatching','waiting','selecting']);
 const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','calendar.create','notes.save_local','notes.share','notes.search_local','notes.update_local']);

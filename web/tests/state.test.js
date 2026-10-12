@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {actionDetail,audioType,validateAudio,displayDate,labelForStatus} from '../js/state.js';
+import {actionDetail,audioType,validateAudio,displayDate,labelForStatus} from '../js/state.js?rev=web-v4';
 
 test('鬧鐘日期依 Android Calendar 1=週日，且不顯示模型不存在的星期',()=>{
   const text=actionDetail({kind:'alarm.create',payload:{hour:7,minute:5,label:'起床',weekdays:[1,2,7,99]}});

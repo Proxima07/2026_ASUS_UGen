@@ -1,3 +1,4 @@
+// @web-revision: web-v4
 export class ApiError extends Error {
   constructor(message, status=0, code='request_failed') {super(message);this.name='ApiError';this.status=status;this.code=code;}
 }

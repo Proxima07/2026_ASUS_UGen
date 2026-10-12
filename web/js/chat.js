@@ -1,4 +1,5 @@
-import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js';
+// @web-revision: web-v4
+import {identifier,element,errorMessage,setMessage,labelForStatus} from './state.js?rev=web-v4';
 export class Chat {
   constructor({api,actions,authenticated=()=>false,onNotesChanged=()=>{},toast=()=>{}}){this.api=api;this.actions=actions;this.authenticated=authenticated;this.onNotesChanged=onNotesChanged;this.toast=toast;this.pending=null;this.busy=false;this.generation=0;this.replies=new Map();this.lastNotes=new Set();this.form=document.querySelector('#chat-form');this.input=document.querySelector('#chat-input');this.send=document.querySelector('#chat-send');this.hint=document.querySelector('#chat-hint');this.conversation=document.querySelector('#conversation');this.empty=document.querySelector('#conversation-empty');this.form.addEventListener('submit',e=>{e.preventDefault();this.submit();});this.input.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();this.submit();}});for(const button of document.querySelectorAll('[data-prompt]'))button.addEventListener('click',()=>this.fill(button.dataset.prompt));}
   fill(text){this.input.value=text;this.input.focus();}

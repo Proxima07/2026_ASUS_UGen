@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CaptureCoordinator,SilenceGate,VoiceFlow} from '../js/voice.js';
+import {CaptureCoordinator,SilenceGate,VoiceFlow} from '../js/voice.js?rev=web-v4';
 
 test('語音與進階錄音共享獨占的麥克風持有權，舊 token 不解除新持有者',()=>{const capture=new CaptureCoordinator();const first=capture.acquire('voice');assert.ok(first);assert.equal(capture.acquire('advanced'),null);capture.release({name:'voice'});assert.equal(capture.acquire('advanced'),null);capture.release(first);const second=capture.acquire('advanced');assert.ok(second);capture.release(first);assert.equal(capture.owner,second);});
 test('本地音量偵測在持續語音後停頓兩秒才自動送出',()=>{const gate=new SilenceGate();assert.equal(gate.sample(.05,0).stop,false);assert.equal(gate.sample(.05,300).speech,true);assert.equal(gate.sample(0,2200).stop,false);assert.deepEqual(gate.sample(0,2300),{stop:true,send:true,reason:'silence'});});
