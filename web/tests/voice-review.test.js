@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v4';
-import {Bridge} from '../js/bridge.js?rev=web-v4';
-import {Recorder} from '../js/recorder.js?rev=web-v4';
+import {VoiceFlow,Voice,CaptureCoordinator} from '../js/voice.js?rev=web-v5';
+import {Bridge} from '../js/bridge.js?rev=web-v5';
+import {Recorder} from '../js/recorder.js?rev=web-v5';
 
 function deferred(){let resolve;let reject;const promise=new Promise((ok,no)=>{resolve=ok;reject=no;});return {promise,resolve,reject};}
 function harness(overrides={}){
@@ -111,10 +111,10 @@ test('待麥克風權限期間離開畫面，晚到的 stream 立即關閉且不
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:()=>permission.promise}}});
   Object.defineProperty(globalThis,'isSecureContext',{configurable:true,value:true});
   const h=harness();const capture=new CaptureCoordinator();
-  const fake={flow:h.flow,capture,authenticated:()=>true,toast:()=>{},time:{},stream:null,recorder:null,captureToken:null,captureRun:null,chunks:[],interrupted:false,
+  const fake={flow:h.flow,capture,authenticated:()=>true,toast:()=>{},time:{},level:{},session:null,stream:null,recorder:null,captureToken:null,captureRun:null,chunks:[],interrupted:false,
     releaseCapture(token){for(const track of this.stream?.getTracks()||[])track.stop();this.stream=null;this.capture.release(token);if(this.captureToken===token)this.captureToken=null;}};
   try{
-    const start=Voice.prototype.start.call(fake);h.setForeground(false);Voice.prototype.interrupt.call(fake,'已離開畫面');h.setForeground(true);
+    Object.setPrototypeOf(fake,Voice.prototype);const start=Voice.prototype.start.call(fake);h.setForeground(false);Voice.prototype.interrupt.call(fake,'已離開畫面');h.setForeground(true);
     permission.resolve(stream);await start;assert.equal(stopped,1);assert.equal(fake.recorder,null);assert.equal(capture.owner,null);
   }finally{if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else delete globalThis.navigator;if(oldSecure)Object.defineProperty(globalThis,'isSecureContext',oldSecure);else delete globalThis.isSecureContext;}
 });
@@ -145,7 +145,7 @@ test('進階錄音工具在麥克風授權等待時切入背景，不會晚到�
   Object.defineProperty(globalThis,'document',{configurable:true,value:doc});
   Object.defineProperty(globalThis,'MediaRecorder',{configurable:true,value:FakeRecorder});
   const capture=new CaptureCoordinator();
-  const fake={capture,captureToken:null,authenticated:()=>true,toast:()=>{},uploading:false,recorder:null,startButton:{},file:{},generation:0,stream:null,timer:null,message:node,status:node,
+  const fake={capture,captureToken:null,authenticated:()=>true,toast:()=>{},uploading:false,recorder:null,startButton:{},stopButton:{},file:{},generation:0,stream:null,timer:null,message:node,status:node,
     setRecording(){},stop(){this.recorder?.stop();},releaseMicrophone(){clearInterval(this.timer);for(const track of this.stream?.getTracks()||[])track.stop();this.stream=null;this.capture.release(this.captureToken);this.captureToken=null;}};
   try{const start=Recorder.prototype.start.call(fake);doc.hidden=true;permission.resolve(stream);await start;assert.equal(created,0);assert.equal(stopped,1);assert.equal(capture.owner,null);}
   finally{fake.releaseMicrophone();for(const [key,descriptor] of descriptors){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}}

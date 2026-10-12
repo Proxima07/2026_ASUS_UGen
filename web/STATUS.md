@@ -1,6 +1,21 @@
-# 網頁功能與完成狀態 — web_v4
+# 網頁功能與完成狀態 — web_v5
 
 更新日期：2026-10-12。
+
+## v5 錄音控制與處理階段
+
+| 項目 | 實作範圍 | 仍須目標設備確認 |
+|---|---|---|
+| 明確收聽及獨立計時 | 不等待 AudioContext.resume | 手機麥克風、視覺與秒數 |
+| 手動結束／取消 | 獨立按鈕、停止收音、session 鎖釋放與收尾 | Chrome／WebView 的實際 stop 事件 |
+| 錄音錯誤復原 | stop／context 錯誤與遲到回呼不得卡住或誤送 | 目標裝置音訊供應者 |
+| 上傳與後端接收 | 成功取得 job ID 才宣稱已接收 | 實際 Tunnel／後端回應 |
+| 真實 STT 階段 | queued／transcribing／transcribed 分開 | 真實本地轉錄服務、等待時間 |
+| 指令送出與結果 | 等待 /chat 回應與 request ID 分開 | 模型速度、APK 原生確認 |
+| 除錯對照 | job／request／trace ID，需 backend_v4 | PyCharm Console 與設備時間 |
+| 取消後不自動操作 | 本頁流程停止、遲到結果忽略 | 後端已收到的工作可能仍完成 |
+
+本版回歸與整合驗證結果見末尾。程式測試不能代替手機麥克風、真實 STT／LLM 與公開網域驗收。
 
 ## v4 靜態資源與載入診斷
 
@@ -88,3 +103,13 @@
 - 使用者新公開網址與兩個資源的遠端讀取在此環境無法取得內容。沒有把工具讀取失敗當作站台中斷，也未透過真實 Chrome／WebView 確認部署修復。
 
 仍須由目標設備確認：更新落在實際 WEB_DIR、公開路徑不再 404、頁面不再提示缺檔／混版、配對及語音正常。若本機 200 而公開 404，繼續檢查既有 Tunnel 與代理設定。
+
+## v5 已執行的驗證
+
+- 87 項 Node 測試通過，包含 28 項 CaptureSession／實際 Voice／Recorder 邊界測試。覆蓋 stop 丟錯、stop 事件缺失、3 秒 watchdog、context 同步／非同步關閉錯誤、取消、late／double stop、舊回呼不碰新 token 與權限遲到。
+- 獨立計時在 AudioContext.resume 尚未解決時仍更新；手動結束控制可用，取消收音不提交。
+- queued／transcribing／transcribed 與發送回應真實性、source_job_id、pipeline trace 與個別 HTTP ID、取消後不自動操作已驗證。
+- 靜態檢查通過：所有 JavaScript 語法、DOM ID、本地同版資源、bootstrap 完整依賴圖、CSP 及文字安全呈現。
+- 與 backend_v4 做本地整合：首頁新控制、12 個帶 revision 資源、健康版本 4、mock 音訊指令轉錄、source job → Agent trace 一致、模型一次、9 個關鍵紀錄事件與預設文字／token 不列印。
+
+尚未在使用者實際 Chrome／Android WebView、麥克風硬體、本地 STT／LLM 或公開 Tunnel 做端到端驗收。若裝置 stop 收尾超過 3 秒，本版會回報未送出並允許重新錄音；不以不完整資料假裝成功。

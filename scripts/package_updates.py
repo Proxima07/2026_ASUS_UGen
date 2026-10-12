@@ -21,6 +21,7 @@ ASSOCIATED_PATHS = {
         "docs/backend_v1.md",
         "docs/backend_v2.md",
         "docs/backend_v3.md",
+        "docs/backend_v4.md",
         "deploy/pi/cloudflared.example.yml",
         "deploy/pi/local-assistant.service",
         "scripts/package_updates.py",
@@ -31,7 +32,7 @@ ASSOCIATED_PATHS = {
         "contracts/examples/contacts-search.json",
         "contracts/examples/dial-result.json",
     ),
-    "web": ("docs/web_v1.md", "docs/web_v2.md", "docs/web_v3.md", "docs/web_v4.md", "scripts/package_updates.py"),
+    "web": ("docs/web_v1.md", "docs/web_v2.md", "docs/web_v3.md", "docs/web_v4.md", "docs/web_v5.md", "scripts/package_updates.py"),
     "android": ("docs/android_v1.md", "docs/android_v2.md", "docs/android_v3.md", "scripts/package_updates.py"),
 }
 EXCLUDED_DIRS = {

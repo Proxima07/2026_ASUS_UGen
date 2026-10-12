@@ -66,6 +66,8 @@ class Settings:
     max_text_chars: int = 8000
     max_audio_jobs: int = 2
     enable_api_docs: bool = False
+    log_level: str = "INFO"
+    log_command_text: bool = False
     timezone: str = "Asia/Taipei"
     host: str = "127.0.0.1"
     port: int = 8000
@@ -112,6 +114,8 @@ class Settings:
             max_text_chars=int(value("MAX_TEXT_CHARS", 8000)),
             max_audio_jobs=int(value("MAX_AUDIO_JOBS", 2)),
             enable_api_docs=boolean("ENABLE_API_DOCS"),
+            log_level=str(value("LOG_LEVEL", "INFO")).upper(),
+            log_command_text=boolean("LOG_COMMAND_TEXT"),
             timezone=str(value("TIMEZONE", "Asia/Taipei")),
             port=int(value("PORT", 8000)),
         )
@@ -126,6 +130,8 @@ class Settings:
             raise ValueError("PUBLIC_BASE_URL 必須是 HTTPS 網站來源，例如 https://assistant.example.com")
         if self.llm_output_mode not in {"json_schema", "json_object", "none"}:
             raise ValueError("LLM_OUTPUT_MODE 必須是 json_schema/json_object/none")
+        if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("LOG_LEVEL 必須是 DEBUG/INFO/WARNING/ERROR/CRITICAL")
         if not self.llm_model.strip():
             raise ValueError("LLM_MODEL 不可空白")
         validate_model_url(self.llm_base_url, self.llm_allow_nonlocal)

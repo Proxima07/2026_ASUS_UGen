@@ -1,10 +1,27 @@
-# Python 本地中樞 backend_v3
+# Python 本地中樞 backend_v4
 
 本版本先交付三段架構中的 **Python 中樞**。它透過 OpenAI 相容 API 呼叫你自己的模型，建立結構化操作、保存加密筆記，以及接收手機端的實際操作結果。
 
 網頁與 APK 會接相同 API，但 **本 ZIP 尚未包含可使用的網頁或 APK**。日曆／電話服務維持原本的同步行為；保護範圍是 LLM 的理解、上下文、記憶與決策鏈。
 
-v3 是套用在 backend_v2 上的差異更新，配合 web_v3 語音首頁及 android_v2 手機筆記搜尋／更新。既有 v1 → v2 → v3 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。
+v4 是套用在 backend_v3 上的差異更新，新增終端機的 STT／Agent 階段紀錄與語音來源追蹤，配合 web_v5 錄音狀態。既有 v1 → v2 → v3 → v4 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。APK 不需因本次更新重新安裝。
+
+## 本版除錯紀錄
+
+預設 INFO 級 JSON 事件直接顯示在終端機／PyCharm Run Console。可看到音訊收到、工作建立、STT 開始與完成、指令收到及 Agent 規劃結果；包含 job／request／trace ID、長度、耗時及操作種類。正常 GET 輪詢紀錄歸 DEBUG，避免每秒查狀態造成大量訊息。
+
+既有 .env 可以追加：
+
+```dotenv
+LOG_LEVEL=INFO
+LOG_COMMAND_TEXT=false
+```
+
+若要在本機除錯時確認實際指令文字，可將 LOG_COMMAND_TEXT 設為 true；最多輸出 200 字元，內容會出現在終端機。配對碼、token、Cookie、音訊與模型服務商原始錯誤都不列印。事件時間使用 UTC；與手機比對時留意時區。
+
+每個 HTTP 回應有後端產生的 X-Request-ID。音訊工作保存 trace_id；web_v5 用 source_job_id 連結該裝置已轉錄的指令，Agent 請求沿用同一流程 trace，可用前端的除錯資訊搜尋終端機。HTTP 個別請求 ID 與整段語音 trace 的用途分開，並不表示所有輪詢都使用同一 HTTP ID。
+
+本次不覆蓋現有 .env；保存配置後重啟後端，啟動方法不變。詳細事件及排錯順序見 docs/backend_v4.md。
 
 ## 語音首頁與手機筆記優先
 
@@ -30,7 +47,7 @@ ZIP 內保留 `local-assistant/` 根目錄，子路徑如下：
 | `backend/` | Python API、Agent 與加密儲存 |
 | `contracts/` | 共用操作格式 |
 | `deploy/pi/` | Cloudflare Tunnel 與啟動範例 |
-| `docs/backend_v1.md`、`docs/backend_v2.md`、`docs/backend_v3.md` | 各版本功能與驗收 |
+| `docs/backend_v1.md` 至 `docs/backend_v4.md` | 各版本功能與驗收 |
 | `scripts/` | 共用協定匯出與差異封裝 |
 
 解壓縮後保留 `local-assistant/` 根目錄，不要把每個檔案拆到不同位置。
@@ -79,6 +96,8 @@ Copy-Item .env.example .env
 | `ACTION_TTL_SECONDS` | 尚未執行操作的有效時間 |
 | `ACTION_LEASE_SECONDS` | 確認後執行憑證的有效時間 |
 | `ENABLE_API_DOCS` | 開啟 `/docs` 本機路由列表及 `/openapi.json`；不使用外部 CDN 或互動 Swagger |
+| `LOG_LEVEL` | 後端事件及 Uvicorn 層級，預設 INFO；DEBUG 可查看輪詢 HTTP |
+| `LOG_COMMAND_TEXT` | 預設 false；true 時將有限長度的指令文字印到本機終端機 |
 
 模型端必須已啟動並具備你填寫的模型。`qwen3:4b` 等名稱只是設定範例，並非本 ZIP 已內附的模型。
 

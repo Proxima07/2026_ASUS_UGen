@@ -1,5 +1,17 @@
 # Backend 版本更新記錄
 
+## v4 — 2026-10-12
+
+- 新增 INFO 級 JSON 終端機事件，涵蓋 HTTP、音訊接收／建立工作、STT、聊天接收與 Agent 規劃開始／完成／失敗。
+- 每個 HTTP 回應加入後端產生的 X-Request-ID；音訊工作及指令結果保存可對照的 trace_id。
+- /chat 新增選填 source_job_id，驗證同裝置、command 模式、transcribed 狀態及逐字稿一致；讓語音 STT 與 Agent 沿用同一流程追蹤。
+- 原文字用戶端、省略新欄位的冪等上下文與現有權限流程保留；新 HTTP ID 不會令同一指令重送時再次規劃。
+- 新增 .env 設定 LOG_LEVEL=INFO、LOG_COMMAND_TEXT=false；預設只輸出階段、ID、數量及操作種類，選擇開啟時才印有限文字。
+- 不輸出配對碼、token、Cookie、音訊或服務商原始錯誤；正常輪詢 HTTP 為 DEBUG，Uvicorn access log 維持關閉。
+- 本包為相對 backend_v3 的差異更新，不覆蓋 .env、不修改資料表，不要求重新配置 STT／LLM 或既有 cloudflared。
+- 驗證與目標設備界線見 STATUS.md；事件說明與使用流程見 docs/backend_v4.md。
+- 新增 7 項紀錄與追蹤測試，全部 75 項後端測試通過；未在目標手機或實際模型服務驗收。
+
 ## v3 — 2026-10-12
 
 - 新增語音指令專用轉錄模式 `/v1/audio?purpose=command`，只轉錄、不先摘要；原錄音筆記模式相容保留。

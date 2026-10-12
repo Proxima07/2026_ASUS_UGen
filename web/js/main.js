@@ -1,12 +1,12 @@
-// @web-revision: web-v4
-import {Api} from './api.js?rev=web-v4';
-import {Bridge} from './bridge.js?rev=web-v4';
-import {Actions} from './actions.js?rev=web-v4';
-import {Chat} from './chat.js?rev=web-v4';
-import {Notes} from './notes.js?rev=web-v4';
-import {Recorder} from './recorder.js?rev=web-v4';
-import {Voice,CaptureCoordinator} from './voice.js?rev=web-v4';
-import {errorMessage,setMessage} from './state.js?rev=web-v4';
+// @web-revision: web-v5
+import {Api} from './api.js?rev=web-v5';
+import {Bridge} from './bridge.js?rev=web-v5';
+import {Actions} from './actions.js?rev=web-v5';
+import {Chat} from './chat.js?rev=web-v5';
+import {Notes} from './notes.js?rev=web-v5';
+import {Recorder} from './recorder.js?rev=web-v5';
+import {Voice,CaptureCoordinator} from './voice.js?rev=web-v5';
+import {errorMessage,setMessage} from './state.js?rev=web-v5';
 
 let identity=null, checking=false, checkAgain=false, loggingOut=false, authGeneration=0, toastTimer, voice=null;
 const capture=new CaptureCoordinator();
@@ -18,7 +18,7 @@ const logout=document.querySelector('#logout-button');
 const authenticated=()=>Boolean(identity)&&!loggingOut;
 function toast(message){const node=document.querySelector('#toast');node.textContent=message;node.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{node.hidden=true;},4500);}
 function openAccount(value=true){account.open=value;document.querySelector('#account-toggle').setAttribute('aria-expanded',String(value));}
-function tab(name){if(name!=='voice'&&voice&&['requesting','recording','uploading','transcribing','understanding','dispatching','waiting','selecting'].includes(voice.flow.state))voice.interrupt('已暫停語音。回到首頁後，可以重新說一次。');document.querySelector('#tools-navigation').hidden=name==='voice';document.querySelector('#tools-toggle').textContent=name==='voice'?'其他工具':'返回語音';document.querySelector('#tools-toggle').setAttribute('aria-expanded',String(name!=='voice'));for(const button of document.querySelectorAll('[data-tab]')){const selected=button.dataset.tab===name;button.classList.toggle('active',selected);button.setAttribute('aria-selected',String(selected));}for(const panel of document.querySelectorAll('.tab-panel'))panel.hidden=panel.id!==`panel-${name}`;if(name==='notes'&&authenticated())notes.load();}
+function tab(name){if(name!=='voice'&&voice?.isBusy())voice.interrupt('已暫停語音。回到首頁後，可以重新說一次。');document.querySelector('#tools-navigation').hidden=name==='voice';document.querySelector('#tools-toggle').textContent=name==='voice'?'其他工具':'返回語音';document.querySelector('#tools-toggle').setAttribute('aria-expanded',String(name!=='voice'));for(const button of document.querySelectorAll('[data-tab]')){const selected=button.dataset.tab===name;button.classList.toggle('active',selected);button.setAttribute('aria-selected',String(selected));}for(const panel of document.querySelectorAll('.tab-panel'))panel.hidden=panel.id!==`panel-${name}`;if(name==='notes'&&authenticated())notes.load();}
 function updateAccount(){
   pairForm.hidden=bridge.nativePresent || authenticated();
   document.querySelector('#native-pair-tip').hidden=!bridge.nativePresent || authenticated();

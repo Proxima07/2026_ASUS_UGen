@@ -30,6 +30,7 @@ class ChatRequest(StrictModel):
     note_target: Literal["platform", "phone_first"] = "platform"
     # Hints choose routing only. They do not authenticate or grant device access.
     native_capabilities: list[NativeCapability] = Field(default_factory=list, max_length=20)
+    source_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
 
     @field_validator("native_capabilities")
     @classmethod

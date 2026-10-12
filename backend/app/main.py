@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import threading
 from html import escape
@@ -22,6 +23,7 @@ from app.agent.planner import Planner
 from app.agent.policy import PolicyError
 from app.api import actions, audio, auth, chat, notes
 from app.config import Settings
+from app.observability import configure_logging, event, http_route, new_trace_id
 from app.security.auth import Authenticator
 from app.storage.database import Database
 from app.storage.repositories import Repository, RepositoryError
@@ -91,6 +93,8 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
         cfg = configured or Settings.from_env()
         cfg.validate()
         app.state.settings = cfg
+        configure_logging(cfg.log_level)
+        event(app.state, "backend.starting", component="backend", version=__version__, port=cfg.port)
         app.state.database = Database(cfg.data_dir / "assistant.sqlite3", cfg.data_dir / "data.key")
         app.state.repo = Repository(app.state.database)
         app.state.auth = Authenticator(app.state.repo, cfg.admin_bootstrap_token)
@@ -111,6 +115,7 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
         app.state.request_lock = request_lock
         if hasattr(app.state.repo, "recover_jobs"):
             app.state.repo.recover_jobs()
+        event(app.state, "backend.ready", component="backend", version=__version__, port=cfg.port)
         try:
             yield
         finally:
@@ -121,6 +126,7 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
                 await asyncio.gather(*tasks, return_exceptions=True)
             await app.state.llm.aclose()
             await app.state.stt.aclose()
+            event(app.state, "backend.stopped", component="backend", version=__version__)
 
     # Configuration is read once at factory construction to set static routes and middleware;
     # default module app defers validation until startup so importing tests needs no .env.
@@ -140,7 +146,25 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
 
     @app.middleware("http")
     async def privacy_headers(request: Request, call_next):
-        response = await call_next(request)
+        http_id = new_trace_id()
+        request.state.http_request_id = http_id
+        route = http_route(request.url.path)
+        method = request.method if request.method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} else "OTHER"
+        level = logging.DEBUG if method in {"GET", "HEAD"} else logging.INFO
+        started = time.monotonic()
+        event(app.state, "http.received", level=level, http_request_id=http_id, method=method, route=route)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Do not let Uvicorn print a traceback containing provider/request data.
+            event(app.state, "http.failed", level=logging.ERROR, http_request_id=http_id,
+                  method=method, route=route, code="internal_error")
+            response = JSONResponse({"error": {"code": "internal_error", "message": "服務未能完成請求，請檢查終端的追蹤編號"}}, 500)
+        event(app.state, "http.completed", level=logging.ERROR if response.status_code >= 500 else
+              logging.WARNING if response.status_code >= 400 else level,
+              http_request_id=http_id, method=method, route=route,
+              status_code=response.status_code, duration_ms=round((time.monotonic()-started)*1000, 2))
+        response.headers["X-Request-ID"] = http_id
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -149,20 +173,28 @@ def create_app(settings: Settings | None = None, *, llm_transport=None, stt_tran
 
     @app.exception_handler(RepositoryError)
     async def repository_error(request: Request, exc: RepositoryError):
+        event(app.state, "http.rejected", level=logging.WARNING,
+              http_request_id=getattr(request.state, "http_request_id", None), code=exc.code)
         return JSONResponse({"error": {"code": exc.code, "message": exc.message}}, exc.status_code)
 
     @app.exception_handler(PolicyError)
     async def policy_error(request: Request, exc: PolicyError):
+        event(app.state, "http.rejected", level=logging.WARNING,
+              http_request_id=getattr(request.state, "http_request_id", None), code=exc.code)
         return JSONResponse({"error": {"code": exc.code, "message": str(exc)}}, 422)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError):
+        event(app.state, "http.rejected", level=logging.WARNING,
+              http_request_id=getattr(request.state, "http_request_id", None), code="invalid_request")
         # FastAPI's default includes raw input; return only safe field locations/types.
         return JSONResponse({"error": {"code": "invalid_request", "message": "請求欄位不合法", "fields": [{"loc": e["loc"], "type": e["type"]} for e in exc.errors()]}}, 422)
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException):
         detail = exc.detail if isinstance(exc.detail, dict) else {"code": "http_error", "message": str(exc.detail)}
+        event(app.state, "http.rejected", level=logging.WARNING,
+              http_request_id=getattr(request.state, "http_request_id", None), code=detail.get("code", "http_error"))
         return JSONResponse({"error": detail}, exc.status_code)
 
     @app.get("/health")
