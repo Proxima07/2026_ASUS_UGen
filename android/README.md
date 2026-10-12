@@ -1,4 +1,4 @@
-# Android APK v3：本地助理手機操作橋接
+# Android APK v4：本地助理手機操作橋接
 
 本子專案使用 **Kotlin＋Android SDK＋WebView**。聊天與筆記介面由你的 Pi 網站提供；APK 負責裝置配對、授權、原生確認及手機操作，沒有內建 LLM，也不會呼叫第三方 AI。
 
@@ -6,7 +6,7 @@
 
 - Android 10 以上（API 29），已更新 Android System WebView。
 - HTTPS 根網址，例如 `https://assistant.example.com`；必須使用有效、受系統信任的憑證。
-- 已依序套用 `backend_v1`、`backend_v2`、`backend_v3`，網頁已由 web_v1 更新至 web_v3，三者部署在相同來源。
+- 已依序套用後端至 backend_v5，網頁至 web_v6，三者部署在相同來源；早期功能仍沿用原協定。
 - 手機能連到該網址；Cloudflare Tunnel 只提供網路路徑，不會替你執行 LLM。
 - 模型、轉錄、記憶與 API 由使用者控制的設備處理。
 
@@ -17,6 +17,7 @@
 | 通訊錄搜尋 | 原生確認與讀取權限後，依姓名查最多 20 筆匹配資料 | `completed`，包含候選聯絡人 |
 | 撥號 | 開啟已填號碼的電話畫面；使用者按下通話 | `opened`，不宣稱通話已接通 |
 | 鬧鐘 | 將時間與名稱交給支援的時鐘 App，保留時鐘確認畫面 | `handed_off`／`opened`，不宣稱鬧鐘一定已保存 |
+| 倒數計時器 | 原生確認倒數 1–86400 秒，再交給支援的手機時鐘 | `handed_off`，請在時鐘確認是否開始 |
 | 日曆 | 使用者選擇已有可寫日曆、確認事件與帳號，再直接寫入事件及提醒 | `completed`＋`event_id` |
 | 手機加密筆記 | 將指定筆記保存至本 APK 自己的加密儲存 | `completed` |
 | 手機筆記搜尋 | 搜尋加密筆記，只回傳最多 20 筆識別碼、標題與短預覽 | `completed` |
@@ -27,6 +28,8 @@
 電話號碼不由模型自行猜測。姓名撥號先查手機通訊錄；同名時使用網站提供的候選選擇。含分機、暫停碼或服務碼的資料不會直接改寫成另一個號碼。
 
 記事本沒有跨廠牌共通的直接寫入介面。本版的「保存到手機」是保存至本 APK；「分享」才是交給其他記事 App。
+
+v4 新增 timer.create，支援「倒數 10 分鐘」「半小時後提醒」等相對倒數，使用 ACTION_SET_TIMER 與秒數；固定時刻仍走既有鬧鐘／日曆。沒有支援該 Intent 的時鐘時回報 unsupported，不在網頁假裝啟動計時。日曆原生確認會附上後端採用的可選預設說明，實際日期、時間與提醒仍可查看。
 
 web_v3 的首頁錄音結束後，會自動轉錄、交給 Agent 並把手機操作送來；不用在網頁再選功能或按「在手機確認」。APK 仍顯示從後端取得的真實操作內容與必要權限，確認後才執行。語音筆記優先保存到手機；明確失敗時後端才能依要求改存平台，取消或結果不明不會改存。
 
@@ -53,7 +56,7 @@ cd local-assistant\android
 
 輸出位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
-版本包附已建置的測試 APK，可直接使用 `releases/local-assistant-debug.apk`，不需先在自己的電腦建置。v3 為 versionName 1.2／versionCode 3，簽署憑證與已交付 v1、v2 相同；可直接更新安裝到 v1，不需先安裝 v2。避免解除安裝清除手機加密筆記。來源仍保留完整 Gradle 專案。
+版本包附已建置的測試 APK，可直接使用 `releases/local-assistant-debug.apk`，不需先在自己的電腦建置。v4 為 versionName 1.3／versionCode 4，簽署憑證與已交付 v1／v2／v3 相同；可直接更新舊 APK，不需先安裝中間版本。避免解除安裝清除手機加密筆記。來源仍保留完整 Gradle 專案。
 
 連接手機並啟用 USB 偵錯後，可安裝：
 

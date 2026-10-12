@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Api,ApiError} from '../js/api.js?rev=web-v5';
+import {Api,ApiError} from '../js/api.js?rev=web-v6';
 
 const response=(body,status=200)=>({ok:status>=200&&status<300,status,json:async()=>body});
 test('預設瀏覽器 fetch 綁定全域物件，避免 Window 接收者檢查造成 Illegal invocation',async()=>{

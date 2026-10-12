@@ -68,6 +68,8 @@ class Settings:
     enable_api_docs: bool = False
     log_level: str = "INFO"
     log_command_text: bool = False
+    conversation_max_messages: int = 12
+    conversation_max_chars: int = 16000
     timezone: str = "Asia/Taipei"
     host: str = "127.0.0.1"
     port: int = 8000
@@ -116,6 +118,8 @@ class Settings:
             enable_api_docs=boolean("ENABLE_API_DOCS"),
             log_level=str(value("LOG_LEVEL", "INFO")).upper(),
             log_command_text=boolean("LOG_COMMAND_TEXT"),
+            conversation_max_messages=int(value("CONVERSATION_MAX_MESSAGES", 12)),
+            conversation_max_chars=int(value("CONVERSATION_MAX_CHARS", 16000)),
             timezone=str(value("TIMEZONE", "Asia/Taipei")),
             port=int(value("PORT", 8000)),
         )
@@ -132,6 +136,8 @@ class Settings:
             raise ValueError("LLM_OUTPUT_MODE 必須是 json_schema/json_object/none")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("LOG_LEVEL 必須是 DEBUG/INFO/WARNING/ERROR/CRITICAL")
+        if not 2 <= self.conversation_max_messages <= 40 or not 2000 <= self.conversation_max_chars <= 48000:
+            raise ValueError("CONVERSATION_MAX_MESSAGES 必須2至40；CONVERSATION_MAX_CHARS 必須2000至48000")
         if not self.llm_model.strip():
             raise ValueError("LLM_MODEL 不可空白")
         validate_model_url(self.llm_base_url, self.llm_allow_nonlocal)

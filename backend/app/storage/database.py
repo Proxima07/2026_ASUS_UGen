@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL REFERENCES devices(device_id),
     payload_enc TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS conversations (
+    conversation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL REFERENCES devices(device_id), payload_enc TEXT NOT NULL,
+    created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_notes_user_created ON notes(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_actions_device_created ON actions(device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requests_device_created ON requests(device_id, created_at DESC);

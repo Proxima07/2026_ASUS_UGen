@@ -1,5 +1,5 @@
-// @web-revision: web-v5
-import {identifier} from './state.js?rev=web-v5';
+// @web-revision: web-v6
+import {identifier} from './state.js?rev=web-v6';
 export function validBridgeMessage(value) {
   return Boolean(value && typeof value==='object' && !Array.isArray(value) && value.protocol_version==='1' && typeof value.type==='string' && ['ready','action_result','error','logged_out'].includes(value.type));
 }

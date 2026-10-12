@@ -1,4 +1,4 @@
-// @web-revision: web-v5
+// @web-revision: web-v6
 export class ApiError extends Error {
   constructor(message, status=0, code='request_failed',httpRequestId=null) {super(message);this.name='ApiError';this.status=status;this.code=code;this.httpRequestId=httpRequestId;}
 }
@@ -26,7 +26,7 @@ export class Api {
     finally{delete paired.token;paired=null;}
   }
   logout(){return this.request('/v1/auth/logout',{method:'POST',timeout:15000});}
-  chat(text,idempotencyKey,{noteTarget='platform',nativeCapabilities=[],sourceJobId}={}){const body={text,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Taipei',idempotency_key:idempotencyKey,note_target:noteTarget,native_capabilities:nativeCapabilities};if(sourceJobId)body.source_job_id=sourceJobId;return this.request('/v1/chat',{method:'POST',body});}
+  chat(text,idempotencyKey,{noteTarget='platform',nativeCapabilities=[],sourceJobId,conversationId,parentRequestId,timezone}={}){const body={text,timezone:timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Taipei',idempotency_key:idempotencyKey,note_target:noteTarget,native_capabilities:nativeCapabilities};if(sourceJobId)body.source_job_id=sourceJobId;if(conversationId)body.conversation_id=conversationId;if(parentRequestId)body.parent_request_id=parentRequestId;return this.request('/v1/chat',{method:'POST',body});}
   getRequest(id){return this.request(`/v1/requests/${encodeURIComponent(id)}`,{timeout:20000});}
   selectContact(id,candidateId){return this.request(`/v1/requests/${encodeURIComponent(id)}/select-contact`,{method:'POST',body:{candidate_id:candidateId}});}
   selectNote(id,candidateId){return this.request(`/v1/requests/${encodeURIComponent(id)}/select-note`,{method:'POST',body:{candidate_id:candidateId}});}

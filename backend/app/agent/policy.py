@@ -30,7 +30,7 @@ def validate_result(kind: str, state: str, result: dict, *, payload: dict | None
         raise PolicyError("invalid_result_json", "操作結果必須是有效 JSON，不能包含 NaN 或 Infinity") from exc
     if len(encoded) > 32768:
         raise PolicyError("result_too_large", "操作結果超過上限")
-    if state == "completed" and kind in {"phone.dial", "alarm.create", "notes.share"}:
+    if state == "completed" and kind in {"phone.dial", "alarm.create", "timer.create", "notes.share"}:
         raise PolicyError("unverifiable_completion", "這項操作只能回報已開啟或已交接，不能宣稱已完成")
     if state == "completed" and kind == "calendar.create" and not result.get("event_id"):
         raise PolicyError("missing_event_id", "直接日曆寫入完成時需要 event_id；開啟新增介面請回報 opened")

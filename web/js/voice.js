@@ -1,10 +1,11 @@
-// @web-revision: web-v5
-import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v5';
-import {CaptureCoordinator,CaptureSession,stopTracks} from './capture.js?rev=web-v5';
-export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v5';
+// @web-revision: web-v6
+import {identifier,validateAudio,errorMessage,labelForStatus,element} from './state.js?rev=web-v6';
+import {CaptureCoordinator,CaptureSession,stopTracks} from './capture.js?rev=web-v6';
+import {uncertainResponse} from './conversation.js?rev=web-v6';
+export {CaptureCoordinator,CaptureSession} from './capture.js?rev=web-v6';
 
 const VOICE_BUSY=new Set(['requesting','recording','stopping','uploading','received_audio','queued','transcribing','transcribed','sending','received_request','understanding','dispatching','waiting','reading_result','sending_selection','selecting']);
-const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','calendar.create','notes.save_local','notes.share','notes.search_local','notes.update_local']);
+const NATIVE_KINDS=new Set(['contacts.search','phone.dial','alarm.create','timer.create','calendar.create','notes.save_local','notes.share','notes.search_local','notes.update_local']);
 
 // One owner, including while a microphone permission request is pending.
 // Local amplitude gate: no cloud recognition, no speech-to-text in the browser.
@@ -27,8 +28,8 @@ export class SilenceGate {
 // The workflow is independent of UI/capture. It never reads action listings and
 // only permits native operations tied to this page's explicit foreground run.
 export class VoiceFlow {
-  constructor({api,bridge,isAuthorized=()=>false,isForeground=()=>true,onState=()=>{},onTranscript=()=>{},onRecord=()=>{},onChoices=()=>{},onDebug=()=>{},makeId=identifier,setTimer=setTimeout,clearTimer=clearTimeout}={}){
-    Object.assign(this,{api,bridge,isAuthorized,isForeground,onState,onTranscript,onRecord,onChoices,onDebug,makeId,setTimer,clearTimer});
+  constructor({api,bridge,conversations=null,isAuthorized=()=>false,isForeground=()=>true,onState=()=>{},onTranscript=()=>{},onRecord=()=>{},onChoices=()=>{},onDebug=()=>{},makeId=identifier,setTimer=setTimeout,clearTimer=clearTimeout}={}){
+    Object.assign(this,{api,bridge,conversations,isAuthorized,isForeground,onState,onTranscript,onRecord,onChoices,onDebug,makeId,setTimer,clearTimer});
     this.generation=0;this.run=null;this.lastRequestId=null;this.state='idle';this.debug={history:[]};this.timer=null;this.attemptedActions=new Set();
   }
   setState(state,message){this.state=state;this.debug.stage=state;const history=this.debug.history||[];this.debug.history=(history[history.length-1]===state?history:[...history,state]).slice(-24);this.onState(state,message);this.onDebug({...this.debug});}
@@ -36,15 +37,17 @@ export class VoiceFlow {
   begin(){
     if(VOICE_BUSY.has(this.state))return null;
     if(!this.isAuthorized()||!this.isForeground()){this.setState('idle','請先完成連線配對，再開始說話。');return null;}
-    this.clearTimer(this.timer);this.debug={history:[]};this.lastRequestId=null;const run={generation:++this.generation,chatKey:this.makeId('voice'),submitted:false,requestId:null,waiting:null,selection:null};this.run=run;
-    this.onTranscript('');this.onRecord(null);this.onChoices(null,[]);this.setState('requesting','等待麥克風權限…');return run;
+    if(this.conversations&&(this.conversations.pending||this.conversations.uncertain)){this.setState('failed',this.conversations.uncertain?'上一筆指令結果尚未確認，請按「新對話」再開始。':'另一筆文字或語音指令正在回覆，請稍候。');return null;}
+    const continuing=this.state==='clarify'&&this.conversations?.conversationId;
+    this.clearTimer(this.timer);this.debug={history:[]};this.lastRequestId=null;const run={generation:++this.generation,chatKey:this.makeId('voice'),submitted:false,requestId:null,waiting:null,selection:null,conversationGeneration:this.conversations?.generation,conversationContext:this.conversations?.snapshot()};this.run=run;
+    this.onTranscript('');if(!continuing)this.onRecord(null);this.onChoices(null,[]);this.setState('requesting','等待麥克風權限…');return run;
   }
-  current(run){return this.run===run&&run.generation===this.generation&&this.isAuthorized()&&this.isForeground();}
+  current(run){return this.run===run&&run.generation===this.generation&&this.isAuthorized()&&this.isForeground()&&(!this.conversations||this.conversations.sameGeneration(run.conversationGeneration));}
   recording(run){if(this.current(run))this.setState('recording','收聽中。說完可以按「結束錄音並送出」。');}
-  cancel(message='已停止這次語音。'){if(this.run?.requestId)this.lastRequestId=this.run.requestId;this.generation++;this.run=null;this.clearTimer(this.timer);this.timer=null;this.onChoices(null,[]);this.setState('paused',message);}
+  cancel(message='已停止這次語音。'){this.conversations?.cancel(this.run?.reservation);this.conversations?.release(this.run?.reservation);if(this.run?.requestId)this.lastRequestId=this.run.requestId;this.generation++;this.run=null;this.clearTimer(this.timer);this.timer=null;this.onChoices(null,[]);this.setState('paused',message);}
   async refreshDisplay(){
     const id=this.lastRequestId,generation=this.generation;if(!id||this.run||!this.isAuthorized()||!this.isForeground())return;
-    try{const record=await this.api.getRequest(id);if(generation!==this.generation||id!==this.lastRequestId||this.run||!this.isAuthorized()||!this.isForeground())return;this.onRecord(record);this.setState('paused',['awaiting_device','processing','needs_selection','needs_note_selection'].includes(record.status)?'這次流程已暫停，不會自動繼續。請先確認手機的實際狀態。':record.message||labelForStatus(record.status));}catch{/* Display refresh has no execution permission and never retries an operation. */}
+    try{const record=await this.api.getRequest(id);if(generation!==this.generation||id!==this.lastRequestId||this.run||!this.isAuthorized()||!this.isForeground())return;if(this.conversations&&!this.conversations.matchesRecord(record))return;this.onRecord(record);this.setState('paused',['awaiting_device','processing','needs_selection','needs_note_selection'].includes(record.status)?'這次流程已暫停，不會自動繼續。請先確認手機的實際狀態。':record.message||labelForStatus(record.status));}catch{/* Display refresh has no execution permission and never retries an operation. */}
   }
   fail(run,error){if(!this.current(run))return;this.clearTimer(this.timer);run.waiting=null;if(error?.httpRequestId)this.updateDebug({errorHttpId:error.httpRequestId});this.setState('failed',errorMessage(error));}
   async acceptAudio(run,blob){
@@ -70,13 +73,19 @@ export class VoiceFlow {
   }
   async submitTranscript(run,text){
     if(!this.current(run)||run.submitted)return;
-    run.submitted=true;this.setState('sending','正在送出指令／等待 Agent 回覆…');
+    const token=this.conversations?.reserve('voice',{attemptKey:run.chatKey,context:run.conversationContext});
+    if(this.conversations&&!token){this.fail(run,new Error(this.conversations.uncertain?'上一筆指令結果尚未確認，請按「新對話」。':this.conversations.pending?'另一筆文字或語音指令正在回覆，請稍候再說一次。':'錄音期間對話已有新回覆，請完整重說這次指令，避免接到不同的上下文。'));return;}
+    run.reservation=token||null;run.submitted=true;this.setState('sending','正在送出指令／等待 Agent 回覆…');
     try{
       const caps=this.bridge.ready?[...this.bridge.capabilities].filter(kind=>NATIVE_KINDS.has(kind)):[];
-      const record=await this.api.chat(text,run.chatKey,{noteTarget:'phone_first',nativeCapabilities:caps,sourceJobId:run.jobId});if(!this.current(run))return;
+      const record=await this.api.chat(text,run.chatKey,{noteTarget:'phone_first',nativeCapabilities:caps,sourceJobId:run.jobId,conversationId:token?.conversationId,parentRequestId:token?.parentRequestId});
+      if(!this.current(run))return;
       if(!record.request_id)throw new Error('中樞沒有回傳指令編號，請檢查後端版本。');
-      run.requestId=record.request_id;this.updateDebug({requestId:record.request_id,traceId:record.trace_id||this.debug.traceId||null,chatHttpId:record.http_request_id||null});this.setState('received_request','中樞已回覆指令編號，正在讀取 Agent 結果。');await this.readRequest(run);
-    }catch(error){this.fail(run,error);}
+      if(this.conversations&&!this.conversations.adopt(token,record))throw new Error('無法核對對話編號，請按「新對話」重新開始。');
+      run.requestId=record.request_id;this.updateDebug({requestId:record.request_id,conversationId:record.conversation_id||null,parentRequestId:token?.parentRequestId||null,traceId:record.trace_id||this.debug.traceId||null,chatHttpId:record.http_request_id||null});
+      this.setState('received_request','中樞已回覆指令編號，正在讀取 Agent 結果。');await this.readRequest(run);
+    }catch(error){if(token&&this.current(run)&&uncertainResponse(error))this.conversations?.markUncertain(token);this.fail(run,error);}
+    finally{this.conversations?.release(token);}
   }
   async readRequest(run){
     if(!this.current(run)||!run.requestId)return;
@@ -84,7 +93,7 @@ export class VoiceFlow {
     catch(error){this.fail(run,error);}
   }
   async processRecord(run,record){
-    if(!this.current(run)||record.request_id!==run.requestId)return;
+    if(!this.current(run)||record.request_id!==run.requestId||(this.conversations&&!this.conversations.matchesRecord(record)))return;
     this.onRecord(record);
     if(['needs_selection','needs_note_selection'].includes(record.status)){
       const kind=record.status==='needs_selection'?'contact':'note';const candidates=kind==='contact'?record.candidates:record.note_candidates;
@@ -126,14 +135,14 @@ export class VoiceFlow {
 const STAGE_LABELS={idle:'準備好',requesting:'等待麥克風權限',recording:'收聽中',stopping:'錄音收尾中',uploading:'上傳錄音中',received_audio:'後端已收音訊',queued:'後端排隊中',transcribing:'STT 轉錄中',transcribed:'STT 轉錄完成',sending:'送出指令／等待 Agent',received_request:'指令編號已回覆',understanding:'Agent 理解中',dispatching:'交給手機',waiting:'等待手機確認',reading_result:'確認手機結果',sending_selection:'送出選擇',selecting:'請選擇對象',completed:'處理結果',clarify:'請補充資訊',paused:'流程已停止',failed:'未完成'};
 
 export class Voice {
-  constructor({api,bridge,capture,authenticated=()=>false,toast=()=>{},silenceOptions={}}){
+  constructor({api,bridge,capture,conversations=null,authenticated=()=>false,toast=()=>{},silenceOptions={}}){
     Object.assign(this,{capture,authenticated,toast,silenceOptions});
     this.session=null;this.recorder=null;this.clockTimer=null;this.sampleTimer=null;this.limitTimer=null;this.startedAt=0;
     this.canRecord=Boolean(globalThis.MediaRecorder&&navigator.mediaDevices?.getUserMedia);
     this.button=document.querySelector('#voice-mic');this.stopButton=document.querySelector('#voice-stop');this.cancelButton=document.querySelector('#voice-cancel');
     this.status=document.querySelector('#voice-status');this.stage=document.querySelector('#voice-stage');this.time=document.querySelector('#voice-time');this.level=document.querySelector('#voice-level');
     this.transcript=document.querySelector('#voice-transcript');this.reply=document.querySelector('#voice-reply');this.choices=document.querySelector('#voice-choices');
-    this.flow=new VoiceFlow({api,bridge,isAuthorized:authenticated,isForeground:()=>!document.hidden,
+    this.flow=new VoiceFlow({api,bridge,conversations,isAuthorized:authenticated,isForeground:()=>!document.hidden,
       onState:(state,message)=>this.renderState(state,message),onDebug:value=>this.renderDebug(value),
       onTranscript:text=>{this.transcript.textContent=text;document.querySelector('#voice-transcript-wrap').hidden=!text;},
       onRecord:record=>this.renderRecord(record),onChoices:(kind,items)=>this.renderChoices(kind,items)});
@@ -156,7 +165,7 @@ export class Voice {
     document.querySelector('#voice-mic-label').textContent=recording?'收聽中 · 說完請按下方按鈕':state==='stopping'?'已結束收聽，正在收尾音訊':busy?'處理進度會顯示在下方':'點一下，開始錄音';
   }
   renderDebug(value){
-    const fields={stage:STAGE_LABELS[value.stage]||value.stage||'準備好',trace:value.traceId,audio_http:value.audioHttpId,chat_http:value.chatHttpId,error_http:value.errorHttpId,job:value.jobId,request:value.requestId,history:(value.history||[]).map(s=>STAGE_LABELS[s]||s).join(' → ')};
+    const fields={stage:STAGE_LABELS[value.stage]||value.stage||'準備好',trace:value.traceId,audio_http:value.audioHttpId,chat_http:value.chatHttpId,error_http:value.errorHttpId,job:value.jobId,request:value.requestId,conversation:value.conversationId,parent:value.parentRequestId,history:(value.history||[]).map(s=>STAGE_LABELS[s]||s).join(' → ')};
     for(const [key,text]of Object.entries(fields)){const node=document.querySelector(`#voice-debug-${key}`);if(node)node.textContent=text?String(text).slice(0,1500):'尚未取得';}
     document.querySelector('#voice-debug').hidden=!(value.history?.length||value.jobId||value.requestId);
   }
@@ -223,5 +232,5 @@ export class Voice {
     if(session){this.clearCaptureTimers(session);session.cancel();if(this.session===session)this.session=null;}
     this.recorder=null;
   }
-  clear(){this.interrupt('請先完成連線配對。');this.flow.lastRequestId=null;this.flow.debug={history:[]};this.renderDebug(this.flow.debug);this.transcript.textContent='';this.reply.textContent='';this.choices.replaceChildren();this.time.textContent='';document.querySelector('#voice-transcript-wrap').hidden=true;document.querySelector('#voice-reply-wrap').hidden=true;}
+  clear(message='請先完成連線配對。'){this.interrupt(message);this.flow.state='idle';this.renderState('idle',message);this.flow.lastRequestId=null;this.flow.debug={history:[]};this.renderDebug(this.flow.debug);this.transcript.textContent='';this.reply.textContent='';this.choices.replaceChildren();this.time.textContent='';document.querySelector('#voice-transcript-wrap').hidden=true;document.querySelector('#voice-reply-wrap').hidden=true;}
 }

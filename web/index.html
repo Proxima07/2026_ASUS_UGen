@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#0c635d">
   <meta name="description" content="由私人設備處理的個人助理。對話、筆記與錄音整理。">
   <title>留白 · 個人助理</title>
-  <link rel="icon" href="/assets/mark.svg?rev=web-v5" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/app.css?rev=web-v5">
-  <meta name="web-revision" content="web-v5">
-  <script type="module" src="/js/bootstrap.js?rev=web-v5"></script>
+  <link rel="icon" href="/assets/mark.svg?rev=web-v6" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css?rev=web-v6">
+  <meta name="web-revision" content="web-v6">
+  <script type="module" src="/js/bootstrap.js?rev=web-v6"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v5" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
-      <div class="header-links"><button id="tools-toggle" class="quiet-button" type="button" aria-controls="tools-navigation" aria-expanded="false">其他工具</button><button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線</button></div>
+      <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg?rev=web-v6" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
+      <div class="header-links"><button id="new-conversation" class="quiet-button" type="button" aria-label="開始新對話，保留已保存的筆記">新對話</button><button id="tools-toggle" class="quiet-button" type="button" aria-controls="tools-navigation" aria-expanded="false">其他工具</button><button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線</button></div>
     </header>
     <details id="account-panel" class="account-panel card"><summary id="account-summary">連線設定</summary>
       <div class="section-heading"><h2>連接你的私人中樞</h2><button id="account-close" class="quiet-button" type="button">收起</button></div>
@@ -31,7 +31,7 @@
       <button id="logout-button" class="secondary-button" type="button" hidden>登出網頁</button>
       <p id="pair-message" class="form-message" role="status"></p>
     </details>
-    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v5">重新載入介面</a></section>
+    <section id="startup-notice" class="notice startup-notice" role="status"><p id="startup-message">介面正在載入。若長時間沒有完成，請先展開「連線設定」，並確認版本檔案已完整覆蓋。</p><ul id="startup-details" hidden></ul><a id="startup-retry" href="/?ui=web-v6">重新載入介面</a></section>
     <div id="connection-warning" class="notice" role="status" hidden>尚未連線。請先完成配對。</div>
     <nav id="tools-navigation" class="tabs" aria-label="其他工具" hidden>
       <button id="tab-voice" class="tab active" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="true">語音首頁</button>
@@ -45,7 +45,7 @@
         <div class="voice-control"><button id="voice-mic" class="voice-mic" type="button" aria-label="開始語音指令" aria-pressed="false"><svg class="voice-icon" width="52" height="52" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="24" y="8" width="16" height="31" rx="8" stroke="white" stroke-width="3"/><path d="M16 29v3a16 16 0 0 0 32 0v-3M32 48v8M24 56h16" stroke="white" stroke-width="3" stroke-linecap="round"/></svg><span class="voice-stop-mark" aria-hidden="true"></span></button><p id="voice-mic-label">點一下，說說你想做的事</p><p id="voice-time" class="voice-time" aria-label="錄音時間">00:00</p><div id="voice-meter-wrap" class="voice-meter-wrap" hidden><label for="voice-level">麥克風音量</label><meter id="voice-level" min="0" max="1" value="0">音量</meter></div><div class="voice-record-controls"><button id="voice-stop" class="primary-button" type="button" hidden>結束錄音並送出</button><button id="voice-cancel" class="quiet-button" type="button" hidden>取消錄音</button></div></div>
         <p id="voice-stage" class="voice-stage" role="status">準備好</p><p id="voice-status" class="voice-status" role="status" aria-live="polite">說完停頓一下，我會理解並處理。</p>
         <div class="voice-messages"><section id="voice-transcript-wrap" class="voice-transcript-block" hidden><p class="voice-message-label">你說</p><p id="voice-transcript"></p></section><section id="voice-reply-wrap" class="voice-response-block" hidden><p class="voice-message-label">留白</p><p id="voice-reply"></p></section><div id="voice-choices" class="voice-choices" aria-label="選擇符合的對象"></div></div>
-        <details id="voice-debug" class="voice-debug" hidden><summary>本次處理資訊</summary><dl><dt>目前階段</dt><dd id="voice-debug-stage">尚未開始</dd><dt>流程追蹤 ID</dt><dd id="voice-debug-trace">尚未取得</dd><dt>音訊 HTTP ID</dt><dd id="voice-debug-audio_http">尚未取得</dd><dt>指令 HTTP ID</dt><dd id="voice-debug-chat_http">尚未取得</dd><dt>錯誤 HTTP ID</dt><dd id="voice-debug-error_http">尚未取得</dd><dt>錄音工作 ID</dt><dd id="voice-debug-job">尚未取得</dd><dt>Agent 請求 ID</dt><dd id="voice-debug-request">尚未取得</dd><dt>處理順序</dt><dd id="voice-debug-history">尚未開始</dd></dl></details><p class="voice-footnote">語音與理解在你的私人設備處理。手機實際操作仍由你確認。</p>
+        <details id="voice-debug" class="voice-debug" hidden><summary>本次處理資訊</summary><dl><dt>目前階段</dt><dd id="voice-debug-stage">尚未開始</dd><dt>流程追蹤 ID</dt><dd id="voice-debug-trace">尚未取得</dd><dt>音訊 HTTP ID</dt><dd id="voice-debug-audio_http">尚未取得</dd><dt>指令 HTTP ID</dt><dd id="voice-debug-chat_http">尚未取得</dd><dt>錯誤 HTTP ID</dt><dd id="voice-debug-error_http">尚未取得</dd><dt>錄音工作 ID</dt><dd id="voice-debug-job">尚未取得</dd><dt>Agent 請求 ID</dt><dd id="voice-debug-request">尚未取得</dd><dt>對話 ID</dt><dd id="voice-debug-conversation">尚未取得</dd><dt>前次請求 ID</dt><dd id="voice-debug-parent">尚未取得</dd><dt>處理順序</dt><dd id="voice-debug-history">尚未開始</dd></dl></details><p class="voice-footnote">語音與理解在你的私人設備處理。手機實際操作仍由你確認。</p>
       </section>
       <section id="panel-chat" class="tab-panel" aria-labelledby="tab-chat" hidden>
         <div class="section-intro"><p class="eyebrow">你的日常，有人接住</p><h1>今天想交給我什麼？</h1><p class="muted">記下一件事、安排時間，或找到想聯絡的人。</p></div>

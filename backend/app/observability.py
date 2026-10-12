@@ -14,9 +14,11 @@ _FIELDS = {
     "trace_id", "http_request_id", "request_id", "job_id", "method", "route",
     "status_code", "duration_ms", "bytes", "content_type", "purpose", "chars",
     "kind", "plan_kind", "state", "code", "version", "component", "port", "command_text",
+    "conversation_id", "history_messages", "history_chars",
 }
 _IDS = {"trace_id": r"http_[0-9a-f]{32}", "http_request_id": r"http_[0-9a-f]{32}",
         "request_id": r"req_[0-9a-f]{32}", "job_id": r"job_[0-9a-f]{32}"}
+_IDS["conversation_id"] = r"conv_[0-9a-f]{32}"
 
 
 def new_trace_id() -> str:

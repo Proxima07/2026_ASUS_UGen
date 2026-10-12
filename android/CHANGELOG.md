@@ -1,5 +1,14 @@
 # Android 更新紀錄
 
+## v4 — 2026-10-12
+
+- 新增 timer.create，原生確認倒數長度／名稱後，以 ACTION_SET_TIMER、EXTRA_LENGTH／MESSAGE 交給時鐘，SKIP_UI=false。
+- 嚴格支援 1–86400 秒與名稱上限 200 字元；沒有支援時鐘回 unsupported，成功只回 handed_off。
+- 更新 dispatcher、能力握手、SET_TIMER visibility query，不改原確認／執行收據防重複流程。
+- 日曆確認可附 server defaults_notice（最多 500 字元，缺少／null／空白不顯示），保留實際日期／提醒及日曆選擇。
+- 最終來源 assembleDebug 與 APK v2 簽章驗證通過；版本 1.3／code 4，憑證與 v1／v2／v3 相同。
+- 來源相對 android_v3；內附 APK 可直接覆蓋舊版。尚未在目標時鐘／手機實測，見 STATUS.md。
+
 ## v3 — 2026-10-12
 
 - 配對畫面新增「檢查後端連線」，以原生 `GET /health` 驗證後端，不傳配對碼或裝置 token、不消耗一次性碼。

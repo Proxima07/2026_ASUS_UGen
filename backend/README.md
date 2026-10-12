@@ -1,10 +1,27 @@
-# Python 本地中樞 backend_v4
+# Python 本地中樞 backend_v5
 
 本版本先交付三段架構中的 **Python 中樞**。它透過 OpenAI 相容 API 呼叫你自己的模型，建立結構化操作、保存加密筆記，以及接收手機端的實際操作結果。
 
 網頁與 APK 會接相同 API，但 **本 ZIP 尚未包含可使用的網頁或 APK**。日曆／電話服務維持原本的同步行為；保護範圍是 LLM 的理解、上下文、記憶與決策鏈。
 
-v4 是套用在 backend_v3 上的差異更新，新增終端機的 STT／Agent 階段紀錄與語音來源追蹤，配合 web_v5 錄音狀態。既有 v1 → v2 → v3 → v4 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。APK 不需因本次更新重新安裝。
+v5 是套用在 backend_v4 上的差異更新，新增多輪上下文、日曆預設與手機倒數計時器，配合 web_v6／android_v4。既有 v1 → v2 → v3 → v4 → v5 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。v4 的階段 log 與語音追蹤保留。
+
+## 多輪上下文與預設
+
+文字與語音以 conversation_id 接續同一頁對話。後端從本裝置已保存的 user／assistant 訊息與實際操作狀態組合歷史，避免只有畫面記得前文、模型卻只看到最新一句。開始新對話用 conversation_id=new；接續要帶上一輪 request_id 作為 parent_request_id。舊用戶端省略欄位仍可單句使用。
+
+歷史採加密保存，預設最多 12 則歷史訊息、16000 字元，可在 .env 設定：
+
+```dotenv
+CONVERSATION_MAX_MESSAGES=12
+CONVERSATION_MAX_CHARS=16000
+```
+
+訊息數可設 2–40、歷史字數可設 2000–48000；這是歷史參考預算，最新 user 訊息與工具 Schema 另外計入模型輸入。前端只在本頁保存對話 ID，重新整理或「新對話」會開啟新的範圍；沒有跨頁歷史列表或長期偏好記憶介面。
+
+日曆可指定 duration_minutes，由後端計算結束時間；未指定時長預設 30 分鐘、提前 10 分鐘提醒，缺少標題用中性「行程」。開始日期／時刻仍須足夠資訊。預設說明與實際值會出現在網頁／APK 確認內容。
+
+新增 timer.create，使用 duration_seconds（1–86400 整數）與 label。倒數 10 分鐘是 600 秒，固定時刻仍使用 alarm.create／calendar.create。手機透過新 APK 交給支援的時鐘 App；交接不宣稱計時器已開始。詳見 docs/backend_v5.md。
 
 ## 本版除錯紀錄
 
@@ -47,7 +64,7 @@ ZIP 內保留 `local-assistant/` 根目錄，子路徑如下：
 | `backend/` | Python API、Agent 與加密儲存 |
 | `contracts/` | 共用操作格式 |
 | `deploy/pi/` | Cloudflare Tunnel 與啟動範例 |
-| `docs/backend_v1.md` 至 `docs/backend_v4.md` | 各版本功能與驗收 |
+| `docs/backend_v1.md` 至 `docs/backend_v5.md` | 各版本功能與驗收 |
 | `scripts/` | 共用協定匯出與差異封裝 |
 
 解壓縮後保留 `local-assistant/` 根目錄，不要把每個檔案拆到不同位置。
@@ -98,6 +115,8 @@ Copy-Item .env.example .env
 | `ENABLE_API_DOCS` | 開啟 `/docs` 本機路由列表及 `/openapi.json`；不使用外部 CDN 或互動 Swagger |
 | `LOG_LEVEL` | 後端事件及 Uvicorn 層級，預設 INFO；DEBUG 可查看輪詢 HTTP |
 | `LOG_COMMAND_TEXT` | 預設 false；true 時將有限長度的指令文字印到本機終端機 |
+| `CONVERSATION_MAX_MESSAGES` | 最多帶入的歷史訊息，預設 12，範圍 2–40 |
+| `CONVERSATION_MAX_CHARS` | 歷史文字總預算，預設 16000，範圍 2000–48000 |
 
 模型端必須已啟動並具備你填寫的模型。`qwen3:4b` 等名稱只是設定範例，並非本 ZIP 已內附的模型。
 

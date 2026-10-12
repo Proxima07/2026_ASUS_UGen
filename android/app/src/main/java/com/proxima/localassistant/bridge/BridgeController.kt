@@ -25,7 +25,7 @@ class BridgeController(
     private val logout: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     private var busy = false
-    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "calendar.create", "notes.save_local", "notes.share", "notes.search_local", "notes.update_local")
+    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "timer.create", "calendar.create", "notes.save_local", "notes.share", "notes.search_local", "notes.update_local")
     fun isBusy(): Boolean = busy
     fun install() {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {

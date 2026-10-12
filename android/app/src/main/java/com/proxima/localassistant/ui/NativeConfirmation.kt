@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.widget.ScrollView
 import android.widget.TextView
+import com.proxima.localassistant.actions.TimerHandler
 import org.json.JSONObject
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -49,7 +50,18 @@ object NativeConfirmation {
                 else (0 until days.length()).joinToString("、") { names[days.getInt(it)] }
             "鬧鐘：${String.format(Locale.ROOT, "%02d:%02d", payload.getInt("hour"), payload.getInt("minute"))}\n名稱：${payload.optString("label", "提醒")}\n重複：$repeat\n使用手機目前時區。請在時鐘 App 確認鬧鐘已建立。"
         }
-        "calendar.create" -> "事件：${payload.getString("title")}\n開始：${formatDate(payload.getString("start"))}\n結束：${formatDate(payload.getString("end"))}\n地點：${payload.optString("location")}\n提醒：開始前 ${payload.optInt("reminder_minutes", 10)} 分鐘\n說明：${payload.optString("description")}"
+        "timer.create" -> {
+            val duration = payload.getInt("duration_seconds")
+            val label = payload.optString("label", "倒數計時")
+            require(label.length <= 200)
+            "倒數計時 ${TimerHandler.formatDuration(duration)}\n名稱：$label\n將開啟手機時鐘的計時器介面。請在時鐘 App 確認是否已開始計時。"
+        }
+        "calendar.create" -> {
+            val defaultsNotice = if (!payload.has("defaults_notice") || payload.isNull("defaults_notice")) ""
+                else payload.getString("defaults_notice").take(500)
+            val defaultsDetails = if (defaultsNotice.isBlank()) "" else "\n\n預設設定：$defaultsNotice"
+            "事件：${payload.getString("title")}\n開始：${formatDate(payload.getString("start"))}\n結束：${formatDate(payload.getString("end"))}\n地點：${payload.optString("location")}\n提醒：開始前 ${payload.optInt("reminder_minutes", 10)} 分鐘\n說明：${payload.optString("description")}$defaultsDetails"
+        }
         "notes.save_local" -> "保存到這個 App 的加密筆記\n\n${payload.getString("title")}\n\n${payload.getString("content")}"
         "notes.search_local" -> {
             val purpose = payload.optString("purpose", "lookup")

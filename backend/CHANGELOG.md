@@ -1,5 +1,18 @@
 # Backend 版本更新記錄
 
+## v5 — 2026-10-12
+
+- /chat 支援 conversation_id=new／既有 ID 與 parent_request_id；後端建立加密的 conversations 表、依裝置隔離並串接已保存請求。
+- 標準 OpenAI messages 包含有界的 user／assistant 歷史、原始時間／時區及實際操作狀態；不接受客戶端自造高權限歷史。
+- 同對話鎖與最後 parent 檢查防止混串；相同冪等鍵的首次 new 重送沿用原 conversation，不重跑模型。
+- 已接納的對話執行失敗回安全 failed record 與 IDs，避免 head 推進後前端無法繼續；未接納的權限／順序錯誤仍回 4xx。
+- 一般「好／謝謝」不重播舊操作；上一輪是澄清時，簡短回答仍可由模型依真實前文接續。
+- 新增 timer.create，整數 1–86400 秒；結果只能誠實回報已開啟／交接，不能冒稱倒數開始。
+- 日曆新增 duration_minutes、後端計算 end；未指定時採 30 分鐘、10 分鐘提醒及中性標題，預設說明提供給原生確認。
+- .env 新增上下文訊息／字數上限；log 列出安全 conversation ID、歷史則數及字數，不輸出整段歷史。
+- 更新共用 action schema。來源包不覆蓋 .env／runtime；啟動自動新增對話表，既有資料與金鑰保留。
+- 新增 16 項回歸，全部 91 項後端測試通過；本地整合通過，實際模型與手機仍待驗收。
+
 ## v4 — 2026-10-12
 
 - 新增 INFO 級 JSON 終端機事件，涵蓋 HTTP、音訊接收／建立工作、STT、聊天接收與 Agent 規劃開始／完成／失敗。

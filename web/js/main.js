@@ -1,15 +1,17 @@
-// @web-revision: web-v5
-import {Api} from './api.js?rev=web-v5';
-import {Bridge} from './bridge.js?rev=web-v5';
-import {Actions} from './actions.js?rev=web-v5';
-import {Chat} from './chat.js?rev=web-v5';
-import {Notes} from './notes.js?rev=web-v5';
-import {Recorder} from './recorder.js?rev=web-v5';
-import {Voice,CaptureCoordinator} from './voice.js?rev=web-v5';
-import {errorMessage,setMessage} from './state.js?rev=web-v5';
+// @web-revision: web-v6
+import {Api} from './api.js?rev=web-v6';
+import {Bridge} from './bridge.js?rev=web-v6';
+import {Actions} from './actions.js?rev=web-v6';
+import {Chat} from './chat.js?rev=web-v6';
+import {Notes} from './notes.js?rev=web-v6';
+import {Recorder} from './recorder.js?rev=web-v6';
+import {Voice,CaptureCoordinator} from './voice.js?rev=web-v6';
+import {errorMessage,setMessage} from './state.js?rev=web-v6';
+import {ConversationCoordinator} from './conversation.js?rev=web-v6';
 
 let identity=null, checking=false, checkAgain=false, loggingOut=false, authGeneration=0, toastTimer, voice=null;
 const capture=new CaptureCoordinator();
+const conversations=new ConversationCoordinator();
 const account=document.querySelector('#account-panel');
 const pairForm=document.querySelector('#pair-form');
 const pairMessage=document.querySelector('#pair-message');
@@ -27,20 +29,21 @@ function updateAccount(){
   warning.hidden=authenticated();warning.textContent=bridge.nativePresent?'請先完成 APK 配對，或按「同步」更新登入狀態。':'尚未連線。請先完成配對。';
   if(location.protocol!=='https:'){warning.hidden=false;warning.textContent='請使用 HTTPS 網址。登入 Cookie 與麥克風需要安全連線。';}
 }
-function signedOut(){authGeneration++;loggingOut=false;document.querySelector('main').inert=false;identity=null;actions.stop();chat.clear();notes.clear();recorder.clear();voice?.clear();updateAccount();openAccount();}
+function signedOut(){conversations.reset();authGeneration++;loggingOut=false;document.querySelector('main').inert=false;identity=null;actions.stop();chat.clear();notes.clear();recorder.clear();voice?.clear();updateAccount();openAccount();}
 const api=new Api({onUnauthorized:()=>{if(identity)signedOut();}});
 const bridge=new Bridge({onChange:()=>{updateAccount();actions.render();notes.render();if(bridge.ready)verifySession();},onResult:value=>{if(authenticated()){voice?.flow.nativeResult(value).catch(e=>toast(errorMessage(e)));actions.nativeResult(value).catch(e=>toast(errorMessage(e)));}},onError:(message,value)=>{if(value?.request_type==='logout'){loggingOut=false;document.querySelector('main').inert=false;updateAccount();}voice?.flow.nativeError(value,message);toast(message);if(authenticated()){actions.busy.clear();actions.refresh().catch(()=>{});}},onLogout:signedOut});
-const actions=new Actions({api,bridge,container:document.querySelector('#action-area'),onRequest:record=>chat.update(record),toast});
+const actions=new Actions({api,bridge,container:document.querySelector('#action-area'),isRequestVisible:id=>conversations.ownsRequest(id),onRequest:record=>chat.update(record),toast});
 const notes=new Notes({api,bridge,actions,authenticated,toast});
-const chat=new Chat({api,actions,authenticated,onNotesChanged:()=>notes.load(),toast});
+const chat=new Chat({api,actions,conversations,authenticated,onNotesChanged:()=>notes.load(),toast});
 const recorder=new Recorder({api,capture,authenticated,onSaved:()=>notes.load(),onTranscript:text=>{if(!text.trim())return toast('逐字稿還沒有內容。');if(text.length>8000)return toast('逐字稿超過對話上限，請先縮短內容。');tab('chat');chat.fill(text);toast('已帶入對話，你可以修正後送出。');},toast});
-voice=new Voice({api,bridge,capture,authenticated,toast});
+voice=new Voice({api,bridge,capture,conversations,authenticated,toast});
 
 async function verifySession(){if(loggingOut)return;if(checking){checkAgain=true;return;}checking=true;const generation=authGeneration;try{const checked=await api.me();if(generation!==authGeneration||loggingOut)return;identity=checked;updateAccount();openAccount(false);await Promise.allSettled([actions.start(),notes.load()]);}catch(e){if(generation!==authGeneration)return;signedOut();if(e.status!==401)setMessage(pairMessage,errorMessage(e),true);}finally{checking=false;if(checkAgain){checkAgain=false;verifySession();}}}
 for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>tab(button.dataset.tab));
+document.querySelector('#new-conversation').addEventListener('click',()=>{conversations.reset();chat.clear();voice?.clear(authenticated()?'新對話已開始，點一下麥克風就可以說話。':'請先完成連線配對。');notes.cancelPendingActions();actions.stop();if(authenticated())actions.start().catch(()=>{});toast('已開啟新對話；已保存的筆記會保留。');});
 document.querySelector('#tools-toggle').addEventListener('click',()=>tab(document.querySelector('#tools-navigation').hidden?'chat':'voice'));
 document.querySelector('#use-voice-button').addEventListener('click',()=>tab('audio'));
 pairForm.addEventListener('submit',async event=>{event.preventDefault();if(bridge.nativePresent)return;const submit=document.querySelector('#pair-submit');submit.disabled=true;setMessage(pairMessage,'正在配對…');try{await api.pair(document.querySelector('#pair-code').value.trim(),document.querySelector('#pair-label').value.trim());document.querySelector('#pair-code').value='';setMessage(pairMessage,'');await verifySession();if(authenticated())toast('已連接你的私人中樞。');}catch(e){setMessage(pairMessage,`${errorMessage(e)} 若配對碼已使用，請向管理者取得新的配對碼。`,true);}finally{submit.disabled=false;}});
-logout.addEventListener('click',async()=>{loggingOut=true;document.querySelector('main').inert=true;voice?.interrupt('正在登出，已停止這次語音。');recorder.clear();logout.disabled=true;try{if(bridge.nativePresent){bridge.logout();setMessage(pairMessage,'正在解除手機配對。');}else{await api.logout();signedOut();toast('已登出。');}}catch(e){loggingOut=false;document.querySelector('main').inert=false;setMessage(pairMessage,errorMessage(e),true);}finally{if(!bridge.nativePresent){loggingOut=false;document.querySelector('main').inert=false;}logout.disabled=false;}});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&authenticated()){voice?.flow.refreshDisplay();actions.refresh().catch(()=>{});}});
+logout.addEventListener('click',async()=>{loggingOut=true;document.querySelector('main').inert=true;voice?.interrupt('正在登出，已停止這次語音。');chat.pause();recorder.clear();logout.disabled=true;try{if(bridge.nativePresent){bridge.logout();setMessage(pairMessage,'正在解除手機配對。');}else{await api.logout();signedOut();toast('已登出。');}}catch(e){loggingOut=false;document.querySelector('main').inert=false;setMessage(pairMessage,errorMessage(e),true);}finally{if(!bridge.nativePresent){loggingOut=false;document.querySelector('main').inert=false;}logout.disabled=false;}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)chat.pause();if(!document.hidden&&authenticated()){voice?.flow.refreshDisplay();actions.refresh().catch(()=>{});}});
 bridge.init();updateAccount();verifySession();

@@ -144,11 +144,19 @@ class Dispatcher:
                     note_operation="update", storage_target="phone")
             return self._platform_update(principal, request_id, fallback=phone_first)
         payload = dict(plan.args)
+        if plan.tool == "calendar.create" and plan._defaults_notice:
+            payload["defaults_notice"] = plan._defaults_notice
         if plan.tool in {"notes.save_local", "notes.share"}:
             note = self.repo.get_note(principal, payload["note_id"])
             payload = {"note_id": note["note_id"], "title": note["title"], "content": note["content"]}
         action = self._action(principal, request_id, plan.tool, payload, f"request:{request_id}:initial")
-        return self._await(principal, request_id, action, plan.message or "請在手機確認操作")
+        message = plan.message or "請在手機確認操作"
+        if plan.tool == "calendar.create":
+            message = (f"請確認行程「{payload['title']}」：{payload['start']} 至 {payload['end']}，"
+                       f"開始前 {payload['reminder_minutes']} 分鐘提醒。" + plan._defaults_notice)
+        elif plan.tool == "timer.create":
+            message = f"請確認倒數計時 {payload['duration_seconds']} 秒「{payload['label']}」；尚未在時鐘 App 執行。"
+        return self._await(principal, request_id, action, message)
 
     @staticmethod
     def _definitive_failure(action: dict) -> bool:

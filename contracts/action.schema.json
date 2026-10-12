@@ -27,6 +27,7 @@
         "contacts.search",
         "phone.dial",
         "alarm.create",
+        "timer.create",
         "calendar.create",
         "notes.save_local",
         "notes.share",
@@ -146,10 +147,33 @@
       "title": "AlarmArgs",
       "type": "object"
     },
+    "timer.create": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Duration Seconds",
+          "type": "integer"
+        },
+        "label": {
+          "default": "倒數計時",
+          "maxLength": 200,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration_seconds"
+      ],
+      "title": "TimerArgs",
+      "type": "object"
+    },
     "calendar.create": {
       "additionalProperties": false,
       "properties": {
         "title": {
+          "default": "行程",
           "maxLength": 200,
           "minLength": 1,
           "title": "Title",
@@ -161,9 +185,31 @@
           "type": "string"
         },
         "end": {
-          "format": "date-time",
-          "title": "End",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "duration_minutes": {
+          "anyOf": [
+            {
+              "maximum": 1440,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Minutes"
         },
         "description": {
           "default": "",
@@ -186,9 +232,7 @@
         }
       },
       "required": [
-        "title",
-        "start",
-        "end"
+        "start"
       ],
       "title": "CalendarArgs",
       "type": "object"

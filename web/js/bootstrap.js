@@ -1,10 +1,10 @@
-// @web-revision: web-v5
+// @web-revision: web-v6
 // This file deliberately imports no modules. Recovery controls must survive an
 // incomplete upload or a failed ES-module graph before application code runs.
-export const WEB_REVISION='web-v5';
+export const WEB_REVISION='web-v6';
 export const REQUIRED_RUNTIME=Object.freeze([
   '/css/app.css','/js/main.js','/js/api.js','/js/bridge.js','/js/actions.js',
-  '/js/chat.js','/js/notes.js','/js/recorder.js','/js/state.js','/js/voice.js','/js/capture.js',
+  '/js/chat.js','/js/notes.js','/js/recorder.js','/js/state.js','/js/voice.js','/js/capture.js','/js/conversation.js',
 ]);
 const JS_TYPES=new Set(['text/javascript','application/javascript','application/x-javascript','text/ecmascript','application/ecmascript']);
 const BOOT_ATTEMPTS=new WeakMap();
@@ -42,7 +42,7 @@ export function bootApplication(options={}){
   if(BOOT_ATTEMPTS.has(doc))return BOOT_ATTEMPTS.get(doc);
   const attempt=runBoot({...options,doc});BOOT_ATTEMPTS.set(doc,attempt);return attempt;
 }
-async function runBoot({doc,fetchImpl=globalThis.fetch.bind(globalThis),loadModule=()=>import('/js/main.js?rev=web-v5')}={}){
+async function runBoot({doc,fetchImpl=globalThis.fetch.bind(globalThis),loadModule=()=>import('/js/main.js?rev=web-v6')}={}){
   wireRecovery(doc);
   const notice=doc.querySelector('#startup-notice'),message=doc.querySelector('#startup-message'),details=doc.querySelector('#startup-details');
   const appLock=doc.querySelector('#app-control-lock'),pairLock=doc.querySelector('#pair-control-lock');

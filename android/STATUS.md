@@ -1,8 +1,8 @@
-# Android v3 功能與驗證狀態
+# Android v4 功能與驗證狀態
 
 此文件記錄「已寫入程式」與「已在實際手機驗證」的區別。不能將成功建置當成目標手機已完成所有操作。
 
-2026-10-12：v3 的建置與分類自檢結果見本文件末尾。測試安裝包隨附於 `releases/local-assistant-debug.apk`，versionCode 提升為 3。尚未執行 Android Lint、模擬器、覆蓋安裝或實體手機操作測試；不能宣稱已確認使用者網址上的實際失敗原因。
+2026-10-12：v4 最終來源建置與簽章驗證通過，測試包隨附於 releases/local-assistant-debug.apk，versionCode 提升為 4。尚未執行 Android Lint、模擬器、覆蓋安裝或實體手機操作測試；不能以建置通過宣稱目標時鐘已開始倒數。
 
 | 項目 | 程式狀態 | 本版驗證範圍 |
 |---|---|---|
@@ -13,6 +13,7 @@
 | 通訊錄姓名搜尋、最多 20 筆 | 已完成 | 需實機授權與通訊錄樣本 |
 | 手機撥號 | 已完成 | 需預設電話 App 實測 |
 | 系統鬧鐘 | 已完成，交接給時鐘 App | 需目標時鐘 App 支援 `ACTION_SET_ALARM` |
+| 系統倒數計時器 | v4 新增，交接時鐘 | 已編譯，需目標時鐘支援 ACTION_SET_TIMER 與確認實際結果 |
 | 日曆事件與提醒 | 已完成，直接寫入 | 需已存在、可寫且支援提醒的日曆 |
 | 手機加密筆記、離線檢視 | 已完成 | 需實機 Keystore 及重啟後讀取驗證 |
 | 手機筆記搜尋、取代與追加 | v2 新增 | 已編譯，需真機資料與更新操作驗證 |
@@ -59,3 +60,12 @@
 - JDK 17 的 SNIHostName 自檢：含底線的樣本遭拒絕、對應連字號樣本通過。這是相容性線索，不是目標 Android 手機的 TLS 實測。
 
 目標手機仍須確認：「檢查後端連線」實際結果、新配對碼、Keystore 保存與 WebView 登入。尚未確認截圖所示網址的失敗原因。
+
+## v4 已執行驗證
+
+- TimerHandler、dispatcher、原生確認及 defaults_notice 相關 Kotlin／Android 35 SDK 編譯通過。
+- 最終完整 assembleDebug 成功，APK v2 簽章有效；package com.proxima.localassistant、versionName 1.3、code 4、minSdk 29、targetSdk 35，與 v1／v2／v3 同 signer。
+- 最終 APK 大小 4,746,476 bytes；SHA-256 a2de730bac36cf80ef99729c0f0079a1adf9debbd112df2a8ea470b408d607ac。Kotlin daemon 初次啟動短暫中止後 Gradle 已恢復完成，沒有來源編譯錯誤。
+- 後端／網頁的 timer 上下界與原生一致；handed_off 不宣稱計時器已啟動，確認及收據流程保留。
+
+實機優先：倒數 30 秒／10 分鐘的參數與名稱、Clock App 的確認和開始結果、不支援時鐘的 unsupported、日曆採用預設說明，以及取消不重播。

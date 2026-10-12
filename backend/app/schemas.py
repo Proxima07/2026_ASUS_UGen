@@ -1,11 +1,11 @@
 """Versioned, bounded contracts shared with the future web/APK clients."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -18,7 +18,7 @@ class PairRequest(StrictModel):
 
 
 NativeCapability = Literal[
-    "contacts.search", "phone.dial", "alarm.create", "calendar.create",
+    "contacts.search", "phone.dial", "alarm.create", "timer.create", "calendar.create",
     "notes.save_local", "notes.share", "notes.search_local", "notes.update_local",
 ]
 
@@ -31,6 +31,14 @@ class ChatRequest(StrictModel):
     # Hints choose routing only. They do not authenticate or grant device access.
     native_capabilities: list[NativeCapability] = Field(default_factory=list, max_length=20)
     source_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
+    conversation_id: str | None = Field(default=None, pattern=r"^(new|conv_[0-9a-f]{32})$")
+    parent_request_id: str | None = Field(default=None, pattern=r"^req_[0-9a-f]{32}$")
+
+    @model_validator(mode="after")
+    def valid_conversation_parent(self):
+        if self.parent_request_id and self.conversation_id in {None, "new"}:
+            raise ValueError("parent_request_id 只能搭配既有 conversation_id")
+        return self
 
     @field_validator("native_capabilities")
     @classmethod
@@ -90,20 +98,30 @@ class AlarmArgs(StrictModel):
 
 
 class CalendarArgs(StrictModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(default="行程", min_length=1, max_length=200)
     start: datetime
-    end: datetime
+    end: datetime | None = None
+    duration_minutes: int | None = Field(default=None, strict=True, ge=1, le=1440)
     description: str = Field(default="", max_length=2000)
     location: str = Field(default="", max_length=200)
     reminder_minutes: int = Field(default=10, ge=0, le=10080)
 
     @model_validator(mode="after")
     def valid_dates(self):
+        if self.end is None:
+            self.end = self.start + timedelta(minutes=self.duration_minutes or 30)
+        elif self.duration_minutes is not None and self.end != self.start + timedelta(minutes=self.duration_minutes):
+            raise ValueError("end 與 duration_minutes 不一致")
         if self.start.tzinfo is None or self.end.tzinfo is None:
             raise ValueError("日曆時間必須包含時區 offset")
         if self.end <= self.start:
             raise ValueError("結束時間必須晚於開始時間")
         return self
+
+
+class TimerArgs(StrictModel):
+    duration_seconds: int = Field(strict=True, ge=1, le=86400)
+    label: str = Field(default="倒數計時", max_length=200)
 
 
 class NoteSearchArgs(StrictModel):
@@ -131,6 +149,7 @@ TOOL_ARGS: dict[str, type[BaseModel]] = {
     "contacts.search": ContactsSearchArgs,
     "phone.dial": DialArgs,
     "alarm.create": AlarmArgs,
+    "timer.create": TimerArgs,
     "calendar.create": CalendarArgs,
     "notes.create": NoteCreate,
     "notes.search": NoteSearchArgs,
@@ -141,6 +160,7 @@ TOOL_ARGS: dict[str, type[BaseModel]] = {
 
 
 class Plan(StrictModel):
+    _defaults_notice: str = PrivateAttr(default="")
     kind: Literal["reply", "clarify", "tool"]
     message: str = Field(default="", max_length=3000)
     tool: str | None = Field(default=None, max_length=64)
@@ -151,7 +171,18 @@ class Plan(StrictModel):
         if self.kind == "tool":
             if self.tool not in TOOL_ARGS:
                 raise ValueError("不支援的工具")
-            self.args = TOOL_ARGS[self.tool].model_validate(self.args).model_dump(mode="json")
+            original_args = self.args
+            self.args = TOOL_ARGS[self.tool].model_validate(original_args).model_dump(mode="json")
+            if self.tool == "calendar.create":
+                defaults = []
+                if "title" not in original_args:
+                    defaults.append(f"標題「{self.args['title']}」")
+                if original_args.get("end") is None and original_args.get("duration_minutes") is None:
+                    defaults.append("時長30分鐘")
+                if "reminder_minutes" not in original_args:
+                    defaults.append("開始前10分鐘提醒")
+                if defaults:
+                    self._defaults_notice = "未提供的欄位已採用預設：" + "、".join(defaults) + "。"
         elif self.tool or self.args:
             raise ValueError("回答與澄清不能帶操作參數")
         elif not self.message.strip():

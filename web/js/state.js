@@ -1,6 +1,6 @@
-// @web-revision: web-v5
+// @web-revision: web-v6
 export const STATUS_LABELS = Object.freeze({processing:'理解中',awaiting_device:'等待手機確認',needs_selection:'請選擇聯絡人',needs_clarification:'需要補充資訊',pending_confirmation:'等待確認',claimed:'手機正在處理',completed:'已完成',opened:'已開啟手機介面',handed_off:'已交給手機 App',cancelled:'已取消',permission_denied:'未取得權限',unsupported:'手機不支援',failed:'未完成',expired:'操作已逾時',execution_expired:'執行結果待查核',queued:'等待轉錄',transcribing:'正在轉錄',summarizing:'正在整理筆記',ready:'筆記草稿完成',transcribed:'逐字稿完成',interrupted:'處理已中斷'});
-export const ACTION_LABELS = Object.freeze({'contacts.search':'查找手機聯絡人','phone.dial':'開啟撥號介面','alarm.create':'設定手機鬧鐘','calendar.create':'新增手機日曆','notes.save_local':'保存到手機筆記','notes.share':'分享至記事 App','notes.search_local':'查詢手機筆記','notes.update_local':'更新手機筆記'});
+export const ACTION_LABELS = Object.freeze({'contacts.search':'查找手機聯絡人','phone.dial':'開啟撥號介面','alarm.create':'設定手機鬧鐘','timer.create':'設定手機倒數計時','calendar.create':'新增手機日曆','notes.save_local':'保存到手機筆記','notes.share':'分享至記事 App','notes.search_local':'查詢手機筆記','notes.update_local':'更新手機筆記'});
 export const ACTIVE_ACTION_STATES = new Set(['pending_confirmation','claimed']);
 export const AUDIO_PENDING_STATES = new Set(['queued','transcribing','summarizing']);
 export function labelForStatus(state) { return STATUS_LABELS[state] || '狀態待確認'; }
@@ -15,11 +15,13 @@ export function displayDate(value) {
   if (Number.isNaN(date.getTime())) return '時間待確認';
   return date.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
 }
+export function durationLabel(seconds){if(!Number.isInteger(seconds)||seconds<1||seconds>86400)return '時間待確認';const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remaining=seconds%60;return [hours?`${hours} 小時`:null,minutes?`${minutes} 分鐘`:null,remaining?`${remaining} 秒`:null].filter(Boolean).join(' ');}
 export function actionDetail(action) {
   const p = action?.payload || {};
   switch(action?.kind) {
     case 'contacts.search': return `搜尋「${p.query || ''}」\n僅回傳符合的聯絡人，不上傳整份通訊錄。`;
     case 'phone.dial': return `${p.name || '指定號碼'}\n${p.phone_number || ''}\n開啟後，由你按下通話。`;
+    case 'timer.create':return `${durationLabel(p.duration_seconds)} · ${p.label || '倒數計時'}\n交給時鐘 App 後，請確認實際倒數計時。`;
     case 'alarm.create': {
       const dayNames=['週日','週一','週二','週三','週四','週五','週六'];
       const days=Array.isArray(p.weekdays)?p.weekdays.filter(d=>Number.isInteger(d)&&d>=1&&d<=7).map(d=>dayNames[d-1]).join('、'):'';

@@ -1,20 +1,21 @@
-// @web-revision: web-v5
-import {ACTION_LABELS,ACTIVE_ACTION_STATES,actionDetail,labelForStatus,element,errorMessage} from './state.js?rev=web-v5';
+// @web-revision: web-v6
+import {ACTION_LABELS,ACTIVE_ACTION_STATES,actionDetail,labelForStatus,element,errorMessage} from './state.js?rev=web-v6';
 export class Actions {
-  constructor({api,bridge,container,onRequest=()=>{},toast=()=>{}}){this.api=api;this.bridge=bridge;this.container=container;this.onRequest=onRequest;this.toast=toast;this.actions=new Map();this.requests=new Map();this.busy=new Set();this.refreshing=false;this.interval=null;this.generation=0;}
+  constructor({api,bridge,container,isRequestVisible=null,onRequest=()=>{},toast=()=>{}}){this.api=api;this.bridge=bridge;this.container=container;this.isRequestVisible=isRequestVisible;this.independent=new Set();this.onRequest=onRequest;this.toast=toast;this.actions=new Map();this.requests=new Map();this.busy=new Set();this.refreshing=false;this.interval=null;this.generation=0;}
   async start(){const generation=this.generation;await this.refresh();if(generation===this.generation&&!this.interval)this.interval=setInterval(()=>{if(!document.hidden)this.refresh().catch(()=>{});},2000);}
-  stop(){this.generation++;clearInterval(this.interval);this.interval=null;this.refreshing=false;this.actions.clear();this.requests.clear();this.busy.clear();this.render();}
+  stop(){this.generation++;clearInterval(this.interval);this.interval=null;this.refreshing=false;this.actions.clear();this.requests.clear();this.independent.clear();this.busy.clear();this.render();}
   async refresh(){
     if(this.refreshing)return;this.refreshing=true;const generation=this.generation;
     try{
-      const listing=await this.api.actions();if(generation!==this.generation)return;this.actions=new Map((listing.items || []).map(a=>[a.action_id,a]));
+      const listing=await this.api.actions();if(generation!==this.generation)return;this.actions=new Map((listing.items || []).filter(a=>!this.isRequestVisible||(a.request_id?this.isRequestVisible(a.request_id):this.independent.has(a.action_id))).map(a=>[a.action_id,a]));for(const [id]of this.requests)if(this.isRequestVisible&&!this.isRequestVisible(id))this.requests.delete(id);
       const ids=new Set([...this.requests.values()].filter(r=>r.status==='processing'||['needs_selection','needs_note_selection'].includes(r.status)||(r.status==='awaiting_device'&&(!r.action||ACTIVE_ACTION_STATES.has(r.action.state)))).map(r=>r.request_id));
       for(const action of this.actions.values())if(ACTIVE_ACTION_STATES.has(action.state)&&action.request_id)ids.add(action.request_id);
       await Promise.all([...ids].map(async id=>{try{const request=await this.api.getRequest(id);if(generation===this.generation)this.acceptRequest(request,false);}catch(e){if(e.status===401)throw e;}}));
       if(generation===this.generation)this.render();
     }finally{if(generation===this.generation)this.refreshing=false;}
   }
-  acceptRequest(record,render=true){this.requests.set(record.request_id,record);if(record.action)this.actions.set(record.action.action_id,record.action);this.onRequest(record);if(render)this.render();}
+  trackIndependent(action){this.independent.add(action.action_id);this.actions.set(action.action_id,action);this.render();}
+  acceptRequest(record,render=true){if(this.isRequestVisible&&!this.isRequestVisible(record.request_id))return;this.requests.set(record.request_id,record);if(record.action)this.actions.set(record.action.action_id,record.action);this.onRequest(record);if(render)this.render();}
   render(){
     this.container.replaceChildren();
     for(const request of this.requests.values()){

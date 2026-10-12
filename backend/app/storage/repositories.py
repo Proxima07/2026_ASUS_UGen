@@ -7,6 +7,9 @@ import secrets
 import sqlite3
 import time
 import uuid
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from app.security.auth import Principal
@@ -193,6 +196,101 @@ class Repository:
             self._assert_active(connection, principal)
             return self._request_view(self._find(connection, "requests", "request_id", request_id, principal))
 
+    def find_request_by_idempotency(self, principal: Principal, text: str, context: dict,
+                                    idempotency_key: str | None) -> dict | None:
+        idem = self._idempotency(idempotency_key)
+        if not idem:
+            return None
+        with self.database.connect() as connection:
+            self._assert_active(connection, principal)
+            row = connection.execute("SELECT * FROM requests WHERE device_id=? AND idem_hash=?",
+                                     (principal.device_id, idem)).fetchone()
+            if row is None:
+                return None
+            if self._decrypt(row, "request", row["request_id"])["_original_input"] != {"text": text, "context": context}:
+                raise RepositoryError("idempotency_conflict", "This idempotency key was used for a different request.", 409)
+            return self._request_view(row)
+
+    def create_conversation_for_request(self, principal: Principal, request_id: str) -> str:
+        conversation_id = "conv_" + request_id.removeprefix("req_")
+        with self.database.connect(write=True) as connection:
+            self._assert_active(connection, principal)
+            self._find(connection, "requests", "request_id", request_id, principal)
+            row = connection.execute("SELECT * FROM conversations WHERE conversation_id=?", (conversation_id,)).fetchone()
+            if row:
+                self._find(connection, "conversations", "conversation_id", conversation_id, principal)
+                return conversation_id
+            now = time.time()
+            payload = self._encrypt(principal, "conversation", conversation_id, {"request_ids": []})
+            connection.execute("INSERT INTO conversations VALUES(?,?,?,?,?,?)",
+                (conversation_id, principal.user_id, principal.device_id, payload, now, now))
+        return conversation_id
+
+    def get_conversation(self, principal: Principal, conversation_id: str) -> dict:
+        with self.database.connect() as connection:
+            self._assert_active(connection, principal)
+            row = self._find(connection, "conversations", "conversation_id", conversation_id, principal)
+            ids = self._decrypt(row, "conversation", conversation_id)["request_ids"]
+            return {"conversation_id": conversation_id, "request_ids": ids,
+                    "last_request_id": ids[-1] if ids else None}
+
+    def append_conversation_request(self, principal: Principal, conversation_id: str,
+                                    request_id: str, parent_request_id: str | None) -> None:
+        with self.database.connect(write=True) as connection:
+            self._assert_active(connection, principal)
+            conversation = self._find(connection, "conversations", "conversation_id", conversation_id, principal)
+            request = self._find(connection, "requests", "request_id", request_id, principal)
+            payload = self._decrypt(conversation, "conversation", conversation_id)
+            ids = payload["request_ids"]
+            if request_id in ids:
+                return
+            if (ids[-1] if ids else None) != parent_request_id:
+                raise RepositoryError("conversation_head_conflict", "Conversation has a newer turn; refresh before sending another.", 409)
+            request_payload = self._decrypt(request, "request", request_id)
+            if request_payload.get("conversation_id") not in {None, conversation_id}:
+                raise RepositoryError("conversation_conflict", "Request belongs to another conversation.", 409)
+            request_payload["conversation_id"] = conversation_id
+            connection.execute("UPDATE requests SET payload_enc=?,updated_at=? WHERE request_id=?",
+                (self._encrypt(principal, "request", request_id, request_payload), time.time(), request_id))
+            payload["request_ids"] = (ids + [request_id])[-20:]
+            connection.execute("UPDATE conversations SET payload_enc=?,updated_at=? WHERE conversation_id=?",
+                (self._encrypt(principal, "conversation", conversation_id, payload), time.time(), conversation_id))
+
+    def conversation_history(self, principal: Principal, conversation_id: str,
+                             *, exclude_request_id: str | None = None,
+                             max_messages: int = 12, max_chars: int = 16000) -> dict:
+        if not 2 <= max_messages <= 40 or not 2000 <= max_chars <= 48000:
+            raise RepositoryError("invalid_context_limits", "Conversation context limits are invalid.")
+        conversation = self.get_conversation(principal, conversation_id)
+        messages = []
+        previous_status = None
+        for request_id in conversation["request_ids"]:
+            if request_id == exclude_request_id:
+                continue
+            request = self.get_request(principal, request_id)
+            previous_status = request["status"]
+            timezone_name = request.get("context", {}).get("timezone", "Asia/Taipei")
+            stamp = datetime.fromtimestamp(request["created_at"], ZoneInfo(timezone_name)).isoformat()
+            messages.append({"role": "user", "content":
+                f"[歷史使用者訊息：原始時間 {stamp}；原始時區 {timezone_name}]\n" + request["text"][:min(4000,max_chars//2-200)]})
+            summary = ""
+            if request.get("action_id"):
+                action = self.get_action(principal, request["action_id"])
+                allowed = {"title", "start", "end", "reminder_minutes", "hour", "minute", "label",
+                           "duration_seconds", "query", "name", "note_id", "weekdays"}
+                metadata = {key: value for key, value in action["payload"].items() if key in allowed}
+                summary = (f"[已保存操作狀態：{action['kind']}，手機狀態={action['state']}；"
+                           f"中樞請求狀態={request['status']}]\n" + json.dumps(metadata, ensure_ascii=False) + "\n")
+            elif request.get("note"):
+                summary = f"[本地筆記狀態={request['status']}；標題={request['note']['title']}]\n"
+            summary += request.get("message") or f"[已保存請求狀態={request['status']}；沒有確認手機操作完成]"
+            messages.append({"role": "assistant", "content": summary[:min(2000,max_chars//2-200)]})
+        # Retain complete chronological pairs; history never contains tool/system roles.
+        messages = messages[-(max_messages//2*2):]
+        while messages and sum(len(message["content"]) for message in messages) > max_chars:
+            messages = messages[2:]
+        return {"messages": messages, "previous_status": previous_status}
+
     def update_request(self, principal: Principal, request_id: str, updates: dict) -> dict:
         if {"text", "context", "_original_input", "request_id", "created_at", "updated_at"} & updates.keys():
             raise RepositoryError("immutable_fields", "Original input and record identity are immutable.")
@@ -345,7 +443,7 @@ class Repository:
             normalized_kind = row["kind"].lower().replace(".", "_")
             # Launching another app does not prove a call connected or an alarm was saved.
             if state == "completed" and (normalized_kind in {"dial", "call", "phone_call", "open_dialer", "set_alarm", "alarm", "notes_share"}
-                                         or "dial" in normalized_kind or "alarm" in normalized_kind):
+                                         or "dial" in normalized_kind or "alarm" in normalized_kind or "timer" in normalized_kind):
                 raise RepositoryError("unverifiable_result", "This action can report opened or handed_off, not verified completion.")
             now = time.time()
             connection.execute("UPDATE actions SET state=?,result_enc=?,result_at=?,updated_at=? WHERE action_id=?",
