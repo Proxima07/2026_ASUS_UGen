@@ -2,7 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-from app.schemas import DialArgs, Plan
+from app.schemas import DialArgs, LocalNoteMetadata, Plan
 
 
 class PolicyError(Exception):
@@ -23,7 +23,7 @@ def validate_plan(plan: Plan, input_text: str) -> None:
             raise PolicyError("past_calendar_time", "模型解析到已過去的時間，請指定日期與時間")
 
 
-def validate_result(kind: str, state: str, result: dict) -> None:
+def validate_result(kind: str, state: str, result: dict, *, payload: dict | None = None) -> None:
     try:
         encoded = json.dumps(result, ensure_ascii=False, allow_nan=False).encode()
     except (ValueError, TypeError) as exc:
@@ -34,6 +34,27 @@ def validate_result(kind: str, state: str, result: dict) -> None:
         raise PolicyError("unverifiable_completion", "這項操作只能回報已開啟或已交接，不能宣稱已完成")
     if state == "completed" and kind == "calendar.create" and not result.get("event_id"):
         raise PolicyError("missing_event_id", "直接日曆寫入完成時需要 event_id；開啟新增介面請回報 opened")
+    if state == "completed" and kind in {"notes.save_local", "notes.update_local"}:
+        note_id = result.get("note_id")
+        if not isinstance(note_id, str) or not 1 <= len(note_id) <= 100:
+            raise PolicyError("missing_note_id", "手機筆記完成時需要回傳 note_id")
+        if payload is not None and note_id != payload.get("note_id"):
+            raise PolicyError("mismatched_note_id", "回傳的手機筆記 ID 與操作不一致")
+    if kind == "notes.search_local" and state == "completed":
+        if set(result) != {"notes"}:
+            raise PolicyError("invalid_local_notes", "手機筆記查詢結果只能包含 notes metadata")
+        notes = result.get("notes")
+        if not isinstance(notes, list) or len(notes) > 20:
+            raise PolicyError("invalid_local_notes", "手機筆記查詢需提供最多 20 筆 notes metadata")
+        seen = set()
+        for note in notes:
+            try:
+                metadata = LocalNoteMetadata.model_validate(note)
+            except Exception as exc:
+                raise PolicyError("invalid_local_notes", "手機筆記結果只能包含合法 note_id、title 與短 preview") from exc
+            if metadata.note_id in seen:
+                raise PolicyError("invalid_local_notes", "手機筆記結果的 note_id 不可重複")
+            seen.add(metadata.note_id)
     if kind == "contacts.search" and state == "completed":
         contacts = result.get("contacts")
         if not isinstance(contacts, list) or len(contacts) > 20:

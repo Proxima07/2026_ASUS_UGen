@@ -25,7 +25,7 @@ class BridgeController(
     private val logout: (onReady: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     private var busy = false
-    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "calendar.create", "notes.save_local", "notes.share")
+    private val allowedKinds = setOf("contacts.search", "phone.dial", "alarm.create", "calendar.create", "notes.save_local", "notes.share", "notes.search_local", "notes.update_local")
     fun isBusy(): Boolean = busy
     fun install() {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
@@ -74,7 +74,7 @@ class BridgeController(
                 if (action.getString("state") != "pending_confirmation")
                     throw ApiException(409, "action_not_pending", "這個操作不在待確認狀態，請重新整理")
                 val payload = JSONObject(action.getJSONObject("payload").toString())
-                if (kind.startsWith("notes.") && !payload.has("content")) {
+                if (kind in setOf("notes.save_local", "notes.share") && !payload.has("content")) {
                     val note = api.getNote(payload.getString("note_id"))
                     payload.put("title", note.getString("title")).put("content", note.getString("content"))
                     if (!note.isNull("transcript")) payload.put("transcript", note.getString("transcript"))

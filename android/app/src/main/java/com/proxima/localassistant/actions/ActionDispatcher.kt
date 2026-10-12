@@ -32,7 +32,8 @@ class ActionDispatcher(
                 "phone.dial" -> DialHandler(activity).execute(payload, reply)
                 "alarm.create" -> AlarmHandler(activity).execute(payload, reply)
                 "calendar.create" -> CalendarHandler(activity, permissions, worker).execute(payload, reply)
-                "notes.save_local", "notes.share" -> NotesHandler(activity, notes, worker).execute(kind, payload, reply)
+                "notes.save_local", "notes.share", "notes.search_local", "notes.update_local" ->
+                    NotesHandler(activity, notes, worker).execute(kind, payload, reply)
                 else -> reply(receipt("unsupported", "手機不支援這項操作"))
             }
         } catch (_: SecurityException) {

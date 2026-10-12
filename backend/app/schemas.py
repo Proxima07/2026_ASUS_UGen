@@ -17,10 +17,24 @@ class PairRequest(StrictModel):
     label: str = Field(min_length=1, max_length=100)
 
 
+NativeCapability = Literal[
+    "contacts.search", "phone.dial", "alarm.create", "calendar.create",
+    "notes.save_local", "notes.share", "notes.search_local", "notes.update_local",
+]
+
+
 class ChatRequest(StrictModel):
     text: str = Field(min_length=1, max_length=8000)
     timezone: str = "Asia/Taipei"
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
+    note_target: Literal["platform", "phone_first"] = "platform"
+    # Hints choose routing only. They do not authenticate or grant device access.
+    native_capabilities: list[NativeCapability] = Field(default_factory=list, max_length=20)
+
+    @field_validator("native_capabilities")
+    @classmethod
+    def normalize_capabilities(cls, value: list[str]) -> list[str]:
+        return sorted(set(value))
 
     @field_validator("timezone")
     @classmethod
@@ -95,6 +109,19 @@ class NoteSearchArgs(StrictModel):
     query: str = Field(min_length=1, max_length=200)
 
 
+class NoteUpdateArgs(StrictModel):
+    query: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=16000)
+    mode: Literal["replace", "append"] = "replace"
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class LocalNoteMetadata(StrictModel):
+    note_id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=200)
+    preview: str | None = Field(default=None, max_length=500)
+
+
 class NoteReferenceArgs(StrictModel):
     note_id: str = Field(min_length=1, max_length=100)
 
@@ -106,6 +133,7 @@ TOOL_ARGS: dict[str, type[BaseModel]] = {
     "calendar.create": CalendarArgs,
     "notes.create": NoteCreate,
     "notes.search": NoteSearchArgs,
+    "notes.update": NoteUpdateArgs,
     "notes.save_local": NoteReferenceArgs,
     "notes.share": NoteReferenceArgs,
 }
@@ -143,11 +171,15 @@ class SelectContact(StrictModel):
     candidate_id: str = Field(min_length=1, max_length=200)
 
 
+class SelectNote(StrictModel):
+    candidate_id: str = Field(min_length=1, max_length=200)
+
+
 class ActionEnvelope(StrictModel):
     protocol_version: Literal["1"] = "1"
     action_id: str
     request_id: str | None
-    kind: Literal["contacts.search", "phone.dial", "alarm.create", "calendar.create", "notes.save_local", "notes.share"]
+    kind: NativeCapability
     payload: dict[str, Any]
     state: str
     expires_at: float

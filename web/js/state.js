@@ -1,5 +1,5 @@
 export const STATUS_LABELS = Object.freeze({processing:'理解中',awaiting_device:'等待手機確認',needs_selection:'請選擇聯絡人',needs_clarification:'需要補充資訊',pending_confirmation:'等待確認',claimed:'手機正在處理',completed:'已完成',opened:'已開啟手機介面',handed_off:'已交給手機 App',cancelled:'已取消',permission_denied:'未取得權限',unsupported:'手機不支援',failed:'未完成',expired:'操作已逾時',execution_expired:'執行結果待查核',queued:'等待轉錄',transcribing:'正在轉錄',summarizing:'正在整理筆記',ready:'筆記草稿完成',transcribed:'逐字稿完成',interrupted:'處理已中斷'});
-export const ACTION_LABELS = Object.freeze({'contacts.search':'查找手機聯絡人','phone.dial':'開啟撥號介面','alarm.create':'設定手機鬧鐘','calendar.create':'新增手機日曆','notes.save_local':'保存到手機筆記','notes.share':'分享至記事 App'});
+export const ACTION_LABELS = Object.freeze({'contacts.search':'查找手機聯絡人','phone.dial':'開啟撥號介面','alarm.create':'設定手機鬧鐘','calendar.create':'新增手機日曆','notes.save_local':'保存到手機筆記','notes.share':'分享至記事 App','notes.search_local':'查詢手機筆記','notes.update_local':'更新手機筆記'});
 export const ACTIVE_ACTION_STATES = new Set(['pending_confirmation','claimed']);
 export const AUDIO_PENDING_STATES = new Set(['queued','transcribing','summarizing']);
 export function labelForStatus(state) { return STATUS_LABELS[state] || '狀態待確認'; }
@@ -25,7 +25,8 @@ export function actionDetail(action) {
       return `${String(p.hour??'').padStart(2,'0')}:${String(p.minute??'').padStart(2,'0')} · ${p.label || '提醒'}\n${days ? `重複：${days}` : '單次鬧鐘'}\n交給時鐘 App 後，請確認實際設定。`;
     }
     case 'calendar.create': return `${p.title || ''}\n${displayDate(p.start)} → ${displayDate(p.end)}${p.location?`\n地點：${p.location}`:''}\n提醒：${p.reminder_minutes ?? 10} 分鐘前`;
-    case 'notes.save_local': case 'notes.share': return `${p.title || '筆記'}\n${p.content || ''}`;
+    case 'notes.save_local': case 'notes.share': case 'notes.update_local': return `${p.title || '筆記'}\n${p.content || ''}`;
+    case 'notes.search_local': return `搜尋「${p.query || ''}」\n僅查詢這個 APK 自己保存的手機筆記。`;
     default: return '請在手機確認操作內容。';
   }
 }

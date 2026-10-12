@@ -29,7 +29,9 @@
         "alarm.create",
         "calendar.create",
         "notes.save_local",
-        "notes.share"
+        "notes.share",
+        "notes.search_local",
+        "notes.update_local"
       ],
       "title": "Kind",
       "type": "string"
@@ -255,6 +257,52 @@
         "query"
       ],
       "title": "NoteSearchArgs",
+      "type": "object"
+    },
+    "notes.update": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "content": {
+          "maxLength": 16000,
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "mode": {
+          "default": "replace",
+          "enum": [
+            "replace",
+            "append"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "query",
+        "content"
+      ],
+      "title": "NoteUpdateArgs",
       "type": "object"
     },
     "notes.save_local": {

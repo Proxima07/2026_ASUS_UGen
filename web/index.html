@@ -14,7 +14,7 @@
   <div class="app-shell">
     <header class="app-header">
       <a class="brand" href="/" aria-label="留白首頁"><img src="/assets/mark.svg" alt="" width="36" height="36"><span>留白<small>把日常，留在自己手裡</small></span></a>
-      <button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線設定</button>
+      <div class="header-links"><button id="tools-toggle" class="quiet-button" type="button" aria-controls="tools-navigation" aria-expanded="false">其他工具</button><button id="account-toggle" class="quiet-button" type="button" aria-controls="account-panel" aria-expanded="false">連線</button></div>
     </header>
     <section id="account-panel" class="account-panel card" hidden>
       <div class="section-heading"><h2>連接你的私人中樞</h2><button id="account-close" class="quiet-button" type="button">收起</button></div>
@@ -31,13 +31,21 @@
       <p id="pair-message" class="form-message" role="status"></p>
     </section>
     <div id="connection-warning" class="notice" role="status" hidden>尚未連線。請先完成配對。</div>
-    <nav class="tabs" aria-label="功能分頁">
-      <button id="tab-chat" class="tab active" type="button" data-tab="chat" aria-controls="panel-chat" aria-selected="true">對話</button>
+    <nav id="tools-navigation" class="tabs" aria-label="其他工具" hidden>
+      <button id="tab-voice" class="tab active" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="true">語音首頁</button>
+      <button id="tab-chat" class="tab" type="button" data-tab="chat" aria-controls="panel-chat" aria-selected="false">文字</button>
       <button id="tab-notes" class="tab" type="button" data-tab="notes" aria-controls="panel-notes" aria-selected="false">筆記</button>
       <button id="tab-audio" class="tab" type="button" data-tab="audio" aria-controls="panel-audio" aria-selected="false">錄音整理</button>
     </nav>
     <main>
-      <section id="panel-chat" class="tab-panel" aria-labelledby="tab-chat">
+      <section id="panel-voice" class="voice-home tab-panel" aria-labelledby="voice-title">
+        <div class="voice-intro"><p class="eyebrow">日常，交給我就好</p><h1 id="voice-title">我在，說吧。</h1><p class="muted">想記下一件事，還是安排今天的生活？</p></div>
+        <div class="voice-control"><button id="voice-mic" class="voice-mic" type="button" aria-label="開始語音指令" aria-pressed="false"><img src="/assets/microphone.svg" width="52" height="52" alt=""><span class="voice-stop-mark" aria-hidden="true"></span></button><p id="voice-mic-label">點一下，說說你想做的事</p><p id="voice-time" class="voice-time"></p></div>
+        <p id="voice-status" class="voice-status" role="status" aria-live="polite">說完停頓一下，我會理解並處理。</p>
+        <div class="voice-messages"><section id="voice-transcript-wrap" class="voice-transcript-block" hidden><p class="voice-message-label">你說</p><p id="voice-transcript"></p></section><section id="voice-reply-wrap" class="voice-response-block" hidden><p class="voice-message-label">留白</p><p id="voice-reply"></p></section><div id="voice-choices" class="voice-choices" aria-label="選擇符合的對象"></div></div>
+        <p class="voice-footnote">語音與理解在你的私人設備處理。手機實際操作仍由你確認。</p>
+      </section>
+      <section id="panel-chat" class="tab-panel" aria-labelledby="tab-chat" hidden>
         <div class="section-intro"><p class="eyebrow">你的日常，有人接住</p><h1>今天想交給我什麼？</h1><p class="muted">記下一件事、安排時間，或找到想聯絡的人。</p></div>
         <div id="conversation" class="conversation" aria-live="polite" aria-relevant="additions text">
           <div id="conversation-empty" class="welcome-card"><p>從一句簡單的話開始。</p><div class="suggestions"><button type="button" data-prompt="幫我打電話給媽媽">打電話給媽媽</button><button type="button" data-prompt="幫我記下：週五開會要帶專案報告。">記下一件事</button><button type="button" data-prompt="幫我設定每天早上七點的起床鬧鐘。">設定起床鬧鐘</button></div><p class="small muted">手機操作需在 Android APK 開啟，並由你確認。</p></div>

@@ -24,9 +24,10 @@ export class Api {
     finally{delete paired.token;paired=null;}
   }
   logout(){return this.request('/v1/auth/logout',{method:'POST',timeout:15000});}
-  chat(text,idempotencyKey){return this.request('/v1/chat',{method:'POST',body:{text,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Taipei',idempotency_key:idempotencyKey}});}
+  chat(text,idempotencyKey,{noteTarget='platform',nativeCapabilities=[]}={}){return this.request('/v1/chat',{method:'POST',body:{text,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Taipei',idempotency_key:idempotencyKey,note_target:noteTarget,native_capabilities:nativeCapabilities}});}
   getRequest(id){return this.request(`/v1/requests/${encodeURIComponent(id)}`,{timeout:20000});}
   selectContact(id,candidateId){return this.request(`/v1/requests/${encodeURIComponent(id)}/select-contact`,{method:'POST',body:{candidate_id:candidateId}});}
+  selectNote(id,candidateId){return this.request(`/v1/requests/${encodeURIComponent(id)}/select-note`,{method:'POST',body:{candidate_id:candidateId}});}
   actions(){return this.request('/v1/actions',{timeout:20000});}
   cancelAction(id){return this.request(`/v1/actions/${encodeURIComponent(id)}/cancel`,{method:'POST'});}
   notes(query=''){return this.request(`/v1/notes?q=${encodeURIComponent(query)}`,{timeout:20000});}
@@ -35,5 +36,6 @@ export class Api {
   deleteNote(id){return this.request(`/v1/notes/${encodeURIComponent(id)}`,{method:'DELETE'});}
   noteAction(id,kind,key){return this.request(`/v1/notes/${encodeURIComponent(id)}/actions`,{method:'POST',body:{kind,idempotency_key:key}});}
   uploadAudio(blob,type){return this.request('/v1/audio',{method:'POST',body:blob,headers:{'Content-Type':type}});}
+  uploadCommandAudio(blob,type){return this.request('/v1/audio?purpose=command',{method:'POST',body:blob,headers:{'Content-Type':type}});}
   audioJob(id){return this.request(`/v1/audio/${encodeURIComponent(id)}`,{timeout:20000});}
 }

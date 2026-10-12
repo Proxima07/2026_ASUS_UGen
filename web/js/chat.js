@@ -16,7 +16,7 @@ export class Chat {
     let message=record.error?.message || record.message || labelForStatus(record.status);
     if(record.action?.state==='expired')message='這項操作已逾時。若仍需要執行，請重新提交指令。';
     if(record.action?.state==='execution_expired')message='未收到手機的最終結果。請先檢查手機中的實際操作，避免重複新增。';
-    if(record.notes?.length)message+='\n\n'+record.notes.map(n=>`${n.title}\n${n.content}`).join('\n\n');
+    if(record.notes?.length)message+='\n\n'+record.notes.map(n=>`${n.title || '筆記'}\n${n.content || n.preview || ''}`).join('\n\n');
     if(record.status==='completed'&&record.candidates?.length)message+='\n\n'+record.candidates.map(c=>`${c.name || '未命名'} · ${c.phone_number || ''}`).join('\n');
     if(record.note)message+=`\n\n${record.note.title}\n${record.note.content}`;
     reply.textContent=message;

@@ -1,10 +1,25 @@
-# Python 本地中樞 backend_v2
+# Python 本地中樞 backend_v3
 
 本版本先交付三段架構中的 **Python 中樞**。它透過 OpenAI 相容 API 呼叫你自己的模型，建立結構化操作、保存加密筆記，以及接收手機端的實際操作結果。
 
 網頁與 APK 會接相同 API，但 **本 ZIP 尚未包含可使用的網頁或 APK**。日曆／電話服務維持原本的同步行為；保護範圍是 LLM 的理解、上下文、記憶與決策鏈。
 
-v2 是套用在 backend_v1 上的差異更新，加入網頁筆記按鈕的原生操作 API，與 web_v1／android_v1 一起使用。解壓 web_v1 到相同 `local-assistant/` 後重新啟動後端，就能由原本 Tunnel 網域開啟首頁。
+v3 是套用在 backend_v2 上的差異更新，配合 web_v3 語音首頁及 android_v2 手機筆記搜尋／更新。既有 v1 → v2 → v3 依序覆蓋，網頁仍由本後端提供，使用你已配置的 cloudflared 即可。
+
+## 語音首頁與手機筆記優先
+
+web_v3 點麥克風錄音，停頓或手動結束後會自動轉錄並送 `/v1/chat`。轉錄使用 `POST /v1/audio?purpose=command` 的 raw 音訊 body；這個模式只轉錄，不先把指令當成筆記摘要。原本的錄音整理仍使用預設 purpose=note。
+
+語音請求帶 `note_target=phone_first` 與 APK 握手取得的 native_capabilities。這些是路由提示，不是身分或操作授權；APK 仍以自己的裝置憑證取得 action、顯示原生確認，再回報結果。
+
+- notes.create：優先交給 APK 的加密手機筆記，手機保存成功時不建立平台筆記。
+- notes.search：先查手機筆記；只回傳受限標題、識別碼與短預覽。
+- notes.update：以 query 查找明確筆記，支援 mode=replace／append；多筆同名要澄清，不猜對象。
+- 沒有手機能力或收到明確失敗結果才使用平台備援。取消、逾時或執行結果不明，不另存另一份或重做手機操作。
+
+平台備援更新也需有明確存在的對象，不能把「更新」當作建立新筆記。純瀏覽器仍無法直接操作系統鬧鐘、日曆或通訊錄；手機操作要在 APK 內開啟網頁。
+
+本版的「手機筆記」是 APK 自己的本機加密筆記區；各廠牌內建記事 App 的直接寫入沒有通用介面，既有分享能力另放在工具子頁。
 
 ## 1. 目錄
 
@@ -15,7 +30,7 @@ ZIP 內保留 `local-assistant/` 根目錄，子路徑如下：
 | `backend/` | Python API、Agent 與加密儲存 |
 | `contracts/` | 共用操作格式 |
 | `deploy/pi/` | Cloudflare Tunnel 與啟動範例 |
-| `docs/backend_v1.md` | 版本功能與驗收 |
+| `docs/backend_v1.md`、`docs/backend_v2.md`、`docs/backend_v3.md` | 各版本功能與驗收 |
 | `scripts/` | 共用協定匯出與差異封裝 |
 
 解壓縮後保留 `local-assistant/` 根目錄，不要把每個檔案拆到不同位置。

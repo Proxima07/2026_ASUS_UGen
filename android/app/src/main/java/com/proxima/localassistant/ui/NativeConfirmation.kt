@@ -51,6 +51,24 @@ object NativeConfirmation {
         }
         "calendar.create" -> "事件：${payload.getString("title")}\n開始：${formatDate(payload.getString("start"))}\n結束：${formatDate(payload.getString("end"))}\n地點：${payload.optString("location")}\n提醒：開始前 ${payload.optInt("reminder_minutes", 10)} 分鐘\n說明：${payload.optString("description")}"
         "notes.save_local" -> "保存到這個 App 的加密筆記\n\n${payload.getString("title")}\n\n${payload.getString("content")}"
+        "notes.search_local" -> {
+            val purpose = payload.optString("purpose", "lookup")
+            require(purpose in setOf("lookup", "update"))
+            "搜尋這個 App 的加密筆記：${payload.getString("query")}\n用途：${if (purpose == "update") "找出要修改的筆記" else "查詢筆記"}\n只將最多 20 筆筆記的識別碼、標題與前 300 字元摘要傳回已配對中樞。完整筆記仍保留在手機。"
+        }
+        "notes.update_local" -> {
+            val mode = payload.getString("mode")
+            require(mode in setOf("replace", "append"))
+            val currentTitle = if (!payload.has("current_title") || payload.isNull("current_title")) ""
+                else payload.getString("current_title").take(200)
+            val currentPreview = if (!payload.has("current_preview") || payload.isNull("current_preview")) ""
+                else payload.getString("current_preview").take(300)
+            val target = if (currentTitle.isBlank()) "筆記識別碼：${payload.getString("note_id")}" else "要修改的筆記：$currentTitle"
+            val preview = if (currentPreview.isBlank()) "" else "\n目前內容（預覽）：\n$currentPreview\n"
+            val rename = if (!payload.has("title") || payload.isNull("title")) "標題：維持原標題"
+                else "新標題：${payload.getString("title")}"
+            "修改這個 App 的加密筆記\n$target$preview\n$rename\n方式：${if (mode == "append") "在原內容後換行追加" else "以以下內容取代原內容"}\n\n${payload.getString("content")}\n\n只修改既有筆記；若找不到，不會建立新筆記。"
+        }
         "notes.share" -> "把以下內容交給你選擇的 App：\n\n${payload.getString("title")}\n\n${payload.getString("content")}\n\n接收 App 是否保存，需由你在該 App 確認。"
         else -> throw IllegalArgumentException("Unsupported action")
     }

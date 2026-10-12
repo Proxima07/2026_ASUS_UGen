@@ -54,6 +54,19 @@ class LocalNotesStore(context: Context) {
     @Synchronized fun list(): List<JSONObject> = directory.listFiles { file -> file.name.endsWith(".enc") }
         .orEmpty().map { read(it) }.sortedByDescending { it.optString("saved_at") }
 
+    /** Read + modify + save hold one lock; an update must never create a missing note. */
+    @Synchronized fun update(noteId: String, content: String, mode: String, title: String? = null): JSONObject {
+        require(noteId.length in 1..100 && content.length in 1..16000)
+        require(mode == "replace" || mode == "append")
+        require(title == null || title.length in 1..200)
+        val existing = get(noteId) ?: throw NoSuchElementException("Local note not found")
+        val updatedContent = if (mode == "append") existing.getString("content") + "\n" + content else content
+        require(updatedContent.length in 1..16000)
+        val updated = JSONObject(existing.toString()).put("content", updatedContent)
+        if (title != null) updated.put("title", title)
+        return save(updated)
+    }
+
     private fun read(file: File): JSONObject {
         val bytes = AtomicFile(file).readFully()
         check(bytes.size > 30 && bytes[0].toInt() == 1)

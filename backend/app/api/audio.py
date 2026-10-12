@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -14,7 +15,7 @@ AUDIO_TYPES = {"audio/webm", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp
 EXTENSIONS = {"audio/webm": "webm", "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/aac": "aac", "audio/flac": "flac"}
 
 
-async def process_audio(state, identity, job_id: str, audio: bytes, content_type: str):
+async def process_audio(state, identity, job_id: str, audio: bytes, content_type: str, purpose: str = "note"):
     try:
         state.repo.update_job(identity, job_id, {"status": "transcribing"})
         transcript = await state.stt.transcribe(audio, "recording." + EXTENSIONS[content_type], content_type)
@@ -22,6 +23,14 @@ async def process_audio(state, identity, job_id: str, audio: bytes, content_type
             raise PlanningError("未辨識到語音，請重新錄音")
         if len(transcript) > 24000:
             raise PlanningError("逐字稿超過第一版支援上限，請分段錄音")
+        if purpose == "command":
+            if len(transcript) > min(state.settings.max_text_chars, 8000):
+                state.repo.update_job(identity, job_id, {"status": "failed", "transcript": transcript,
+                    "error": {"code": "command_too_long", "message": "語音指令超過字數上限，請分段說明"}})
+            else:
+                state.repo.update_job(identity, job_id, {"status": "transcribed", "transcript": transcript,
+                    "message": "語音指令已轉錄"})
+            return
         state.repo.update_job(identity, job_id, {"status": "summarizing", "transcript": transcript})
         try:
             async with state.model_semaphore:
@@ -43,7 +52,7 @@ async def process_audio(state, identity, job_id: str, audio: bytes, content_type
 
 
 @router.post("", status_code=202)
-async def upload_audio(request: Request, identity=Depends(principal)):
+async def upload_audio(request: Request, purpose: Literal["note", "command"] = "note", identity=Depends(principal)):
     state = request.app.state
     if not state.settings.stt_base_url:
         raise HTTPException(503, detail={"code": "stt_disabled", "message": "尚未配置本地轉錄服務"})
@@ -63,11 +72,11 @@ async def upload_audio(request: Request, identity=Depends(principal)):
     if len(state.audio_tasks) >= state.settings.max_audio_jobs:
         raise HTTPException(429, detail={"code": "audio_busy", "message": "轉錄工作已滿，請稍後重試"})
     job_id = "job_" + uuid.uuid4().hex
-    state.repo.put_job(identity, job_id, {"status": "queued"})
-    task = asyncio.create_task(process_audio(state, identity, job_id, bytes(audio), content_type))
+    state.repo.put_job(identity, job_id, {"status": "queued", "purpose": purpose})
+    task = asyncio.create_task(process_audio(state, identity, job_id, bytes(audio), content_type, purpose))
     state.audio_tasks.add(task)
     task.add_done_callback(state.audio_tasks.discard)
-    return {"job_id": job_id, "status": "queued"}
+    return {"job_id": job_id, "status": "queued", "purpose": purpose}
 
 
 @router.get("/{job_id}")

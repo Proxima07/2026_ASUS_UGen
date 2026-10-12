@@ -36,7 +36,7 @@ async def cancel(action_id: str, request: Request, identity=Depends(principal)):
 async def result(action_id: str, body: ActionResult, request: Request, identity=Depends(device_principal)):
     state = request.app.state
     action = state.repo.get_action(identity, action_id)
-    validate_result(action["kind"], body.state, body.result)
+    validate_result(action["kind"], body.state, body.result, payload=action["payload"])
     async with state.request_lock(action.get("request_id") or action_id):
         action = state.repo.record_result(identity, action_id, body.execution_token, body.state, body.result)
         record = state.dispatcher.after_result(identity, action)

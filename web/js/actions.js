@@ -7,7 +7,7 @@ export class Actions {
     if(this.refreshing)return;this.refreshing=true;const generation=this.generation;
     try{
       const listing=await this.api.actions();if(generation!==this.generation)return;this.actions=new Map((listing.items || []).map(a=>[a.action_id,a]));
-      const ids=new Set([...this.requests.values()].filter(r=>r.status==='processing'||r.status==='needs_selection'||(r.status==='awaiting_device'&&(!r.action||ACTIVE_ACTION_STATES.has(r.action.state)))).map(r=>r.request_id));
+      const ids=new Set([...this.requests.values()].filter(r=>r.status==='processing'||['needs_selection','needs_note_selection'].includes(r.status)||(r.status==='awaiting_device'&&(!r.action||ACTIVE_ACTION_STATES.has(r.action.state)))).map(r=>r.request_id));
       for(const action of this.actions.values())if(ACTIVE_ACTION_STATES.has(action.state)&&action.request_id)ids.add(action.request_id);
       await Promise.all([...ids].map(async id=>{try{const request=await this.api.getRequest(id);if(generation===this.generation)this.acceptRequest(request,false);}catch(e){if(e.status===401)throw e;}}));
       if(generation===this.generation)this.render();
@@ -17,9 +17,9 @@ export class Actions {
   render(){
     this.container.replaceChildren();
     for(const request of this.requests.values()){
-      if(request.status!=='needs_selection')continue;
+      if(!['needs_selection','needs_note_selection'].includes(request.status))continue;
       const card=element('article','card action-card');card.append(element('h2','',request.message || '選擇聯絡人'));
-      for(const candidate of request.candidates || []){const button=element('button','candidate-button',`${candidate.name || '未命名'} · ${candidate.phone_number || ''}`);button.type='button';button.disabled=this.busy.has(request.request_id);button.addEventListener('click',()=>this.select(request,candidate,button));card.append(button);}
+      for(const candidate of (request.status==='needs_note_selection'?request.note_candidates:request.candidates) || []){const button=element('button','candidate-button',request.status==='needs_note_selection'?`${candidate.title || '未命名筆記'} · ${candidate.preview || ''}`:`${candidate.name || '未命名'} · ${candidate.phone_number || ''}`);button.type='button';button.disabled=this.busy.has(request.request_id);button.addEventListener('click',()=>this.select(request,candidate,button));card.append(button);}
       this.container.append(card);
     }
     for(const action of this.actions.values()){
@@ -36,6 +36,6 @@ export class Actions {
   }
   async execute(action,button){const generation=this.generation;this.busy.add(action.action_id);button.disabled=true;try{this.bridge.execute(action.action_id,action.kind);this.toast('請在手機確認操作內容。');setTimeout(()=>{if(generation!==this.generation)return;this.busy.delete(action.action_id);this.refresh().catch(e=>this.toast(errorMessage(e)));},3500);}catch(e){this.busy.delete(action.action_id);this.toast(errorMessage(e));this.render();}}
   async cancel(action,button){const generation=this.generation;this.busy.add(action.action_id);button.disabled=true;try{const result=await this.api.cancelAction(action.action_id);if(generation!==this.generation)return;this.actions.set(action.action_id,result.action);if(result.request)this.acceptRequest(result.request,false);this.toast('操作已取消。');}catch(e){this.toast(errorMessage(e));}finally{if(generation===this.generation){this.busy.delete(action.action_id);this.render();}}}
-  async select(request,candidate,button){const generation=this.generation;this.busy.add(request.request_id);button.disabled=true;try{const record=await this.api.selectContact(request.request_id,candidate.candidate_id);if(generation!==this.generation)return;const full=await this.api.getRequest(record.request_id);if(generation===this.generation)this.acceptRequest(full);}catch(e){this.toast(errorMessage(e));}finally{if(generation===this.generation){this.busy.delete(request.request_id);this.render();}}}
+  async select(request,candidate,button){const generation=this.generation;this.busy.add(request.request_id);button.disabled=true;try{const record=request.status==='needs_note_selection'?await this.api.selectNote(request.request_id,candidate.candidate_id):await this.api.selectContact(request.request_id,candidate.candidate_id);if(generation!==this.generation)return;const full=await this.api.getRequest(record.request_id);if(generation===this.generation)this.acceptRequest(full);}catch(e){this.toast(errorMessage(e));}finally{if(generation===this.generation){this.busy.delete(request.request_id);this.render();}}}
   async nativeResult(value){if(value.action_id)this.busy.delete(value.action_id);if(value.result?.request)this.acceptRequest(value.result.request);this.toast(value.message || labelForStatus(value.state));await this.refresh();}
 }

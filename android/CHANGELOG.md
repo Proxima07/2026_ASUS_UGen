@@ -1,5 +1,14 @@
 # Android 更新紀錄
 
+## v2 — 2026-10-12
+
+- 新增 notes.search_local，搜尋 APK 手機加密筆記並回傳受限的識別碼、標題與短預覽。
+- 新增 notes.update_local，支援既有筆記的取代／追加，未指定標題時保留原標題；讀取與寫入在同一儲存鎖內進行。
+- 配合 web_v3 語音首頁自動交接；原生確認、領取憑證、防重複及結果重送仍保留。
+- 筆記參數補取僅限保存與分享，避免搜尋操作錯誤存取後端筆記。
+- versionName 1.1、versionCode 2；最終 APK 已編譯並驗證簽章，簽署憑證與已交付 v1 相同。
+- 本 ZIP 是相對 android_v1 的差異更新，附更新後的測試 APK。尚未真機驗收，詳見 STATUS.md。
+
 ## v1 — 2026-10-12
 
 首次提供 `android_v1.zip`，保留 `local-assistant/android/` 目錄。
