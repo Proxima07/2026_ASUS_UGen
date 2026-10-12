@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import {Api,ApiError} from '../js/api.js';
 
 const response=(body,status=200)=>({ok:status>=200&&status<300,status,json:async()=>body});
+test('預設瀏覽器 fetch 綁定全域物件，避免 Window 接收者檢查造成 Illegal invocation',async()=>{
+  const original=globalThis.fetch;
+  const calls=[];
+  globalThis.fetch=function(path,options){
+    if(this!==globalThis)throw new TypeError('Illegal invocation');
+    calls.push({path,options});
+    return Promise.resolve(response({device_id:'fixture'}));
+  };
+  try {
+    const api=new Api();
+    assert.equal((await api.me()).device_id,'fixture');
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].path,'/v1/auth/me');
+    assert.equal(calls[0].options.redirect,'error');
+  } finally {globalThis.fetch=original;}
+});
 test('API 只使用同來源、HttpOnly Cookie、禁止轉址，不將裝置 token 放進一般請求',async()=>{let captured;const api=new Api({fetchImpl:async(path,options)=>{captured={path,options};return response({items:[]});}});await api.notes('私人想法');assert.equal(captured.path,'/v1/notes?q=%E7%A7%81%E4%BA%BA%E6%83%B3%E6%B3%95');assert.equal(captured.options.credentials,'same-origin');assert.equal(captured.options.redirect,'error');assert.equal(captured.options.cache,'no-store');assert.equal(captured.options.headers.Authorization,undefined);await assert.rejects(()=>api.request('https://other.example/v1/notes'),/同來源/);});
 test('配對憑證只換取安全 session，交換後移除原物件 token',async()=>{const calls=[];const paired={token:'private-device-token',device_id:'dev1'};const api=new Api({fetchImpl:async(path,options)=>{calls.push({path,options});return response(path.endsWith('/pair')?paired:{device_id:'dev1'});}});const result=await api.pair('one-use-code','我的手機');assert.equal(calls[1].path,'/v1/auth/session');assert.equal(calls[1].options.headers.Authorization,'Bearer private-device-token');assert.equal(paired.token,undefined);assert.equal(result.token,undefined);});
 test('配對 session 失敗仍移除 token',async()=>{const paired={token:'secret'};const api=new Api({fetchImpl:async(path)=>response(path.endsWith('/pair')?paired:{error:{code:'failed',message:'連線失敗'}},path.endsWith('/pair')?200:503)});await assert.rejects(()=>api.pair('pair-code','browser'),/連線失敗/);assert.equal(paired.token,undefined);});

@@ -1,5 +1,19 @@
 # 網頁更新紀錄
 
+## web_v2 — 2026-10-12
+
+### 修正
+
+- 修正 API 類別保存原生 fetch 卻以類別物件呼叫，造成瀏覽器接收者檢查失敗的問題。預設 fetch 現在綁定 globalThis，避免送出請求前的 TypeError 被顯示為「連線中斷」。
+- 加入遵守瀏覽器接收者檢查的回歸案例；原版可重現 network_error，修正後可送出 API 請求。21 項 Node 測試通過。
+- 補充既有 cloudflared 的整合、Cloudflare Web Analytics CSP 訊息、API 驗證與排錯步驟。
+
+### 套用與限制
+
+- 本 ZIP 為相對 web_v1 的差異更新，覆蓋同一個 local-assistant/web 後強制重新整理。
+- 後端與 APK 沒有變更；CSP、同來源 API 與禁止重新導向的限制持續保留。
+- 修正已經在接收者檢查回歸測試驗證，尚未在使用者的瀏覽器、Tunnel 或手機完成現場驗收。重新導向、Access 或網路失敗仍需要查實際 Network 請求。
+
 ## web_v1 — 2026-10-12
 
 首次交付。ZIP 保留 `local-assistant/web/` 結構，沒有編譯依賴或外部前端資源。

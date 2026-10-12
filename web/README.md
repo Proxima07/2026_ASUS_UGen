@@ -1,6 +1,8 @@
-# 網頁子項目 web_v1
+# 網頁子項目 web_v2
 
-版本：1。更新日期：2026-10-12。
+版本：2。更新日期：2026-10-12。
+
+web_v2 為 web_v1 的差異更新；先有 v1，再覆蓋本版。修正原生 fetch 綁定錯誤，避免 API 請求尚未送出就顯示「連線中斷」。詳見 CHANGELOG.md。
 
 這份網頁是手機優先的個人助理介面，包含對話、筆記、錄音整理。所有資源隨檔案提供，不使用 CDN、第三方分析、雲端語音辨識或瀏覽器 Web Speech API。文字、逐字稿與模型回覆均以 `textContent` 顯示。
 
@@ -10,7 +12,7 @@
 2. 先安裝 `backend_v1.zip`，再套用本次 `backend_v2.zip` 後端更新。v2 新增「已存在筆記 → 手機保存／分享」的確定性 API；v1 也能使用對話、筆記 CRUD 與錄音功能。
 3. 設定後端 `.env` 的 `PUBLIC_BASE_URL=https://你的子網域`。後端由此推導允許的來源與主機名稱。`WEB_DIR` 預設指向與 backend 並列的 web；自訂時填這個目錄的絕對路徑。
 4. 完整關閉後重新啟動後端。後端在啟動時偵測 `index.html`；只解壓、不重啟，既有程序不會自動掛載網站。
-5. Cloudflare Tunnel 的該子網域指向同一個 FastAPI 服務。網頁、`/v1/*` 與 API 必須同來源；不要讓 Tunnel 規則只轉發首頁。
+5. 使用你既有的 cloudflared 即可，不必套用專案的 Tunnel 範例或建立第二份 connector。該子網域指向同一個 FastAPI 服務；網頁、`/v1/*` 與 API 必須同來源，整個 hostname 轉到後端。
 6. 用 `https://你的子網域/` 開啟。一般瀏覽器輸入管理者產生的一次性配對碼；APK 先在原生連線頁配對，由 APK 注入 HttpOnly Cookie 後載入網頁。
 
 網頁無須 npm install 或 build。不建議單獨以 `python -m http.server` 展示，因為沒有後端 API、同來源 Cookie 與 HTTPS 錄音條件。
@@ -69,6 +71,20 @@ cd local-assistant/web
 node --test tests/*.test.js
 ```
 
-20 項 Node 內建測試已通過，不需要套件下載，涵蓋 API、原生握手、音訊限制、狀態誠實顯示、登出與遲到回應。模擬測試不代表已驗證真機麥克風、通訊錄、日曆、鬧鐘或 Cloudflare 網域。
+21 項 Node 內建測試已通過，不需要套件下載，涵蓋瀏覽器 fetch 接收者、API、原生握手、音訊限制、狀態誠實顯示、登出與遲到回應。模擬測試不代表已驗證真機麥克風、通訊錄、日曆、鬧鐘或 Cloudflare 網域。
+
+## 已有 Tunnel 的連線排錯
+
+1. 覆蓋 web_v2 後，用 Ctrl+Shift+R 強制重新整理；DevTools 開啟時可先勾 Disable cache。
+2. 開啟 `https://你的實際子網域/health`，預期是後端 JSON 且 status=ok；健康檢查不會呼叫模型。
+3. 開啟同網域 `/v1/auth/me`：未配對時應是 401 JSON，表示 API 已到達；登入後應是 200 JSON。
+4. 若仍顯示 network_error，在 Network 選 Fetch/XHR，檢查上述 API 的狀態。301／302／307／308 會被本版禁止重新導向政策拒絕；需修正原始網址／規則，或依部署需求正式整合 Access，不以放寬程式限制代替修正。
+5. 若 backend/.env 的 PUBLIC_BASE_URL 不等於實際 HTTPS 網站來源，修改後重啟後端。既有 Tunnel 的 service URL 對齊同機 `http://127.0.0.1:8000` 或實際 PORT。
+
+`static.cloudflareinsights.com/beacon.min.js` 是 Cloudflare Web Analytics 的統計腳本。它被 script-src 'self' 阻擋不等同 API 失敗；專案本身不依賴該腳本。若不要統計注入，至 Cloudflare Web Analytics 找該 hostname，Manage site 選 Disable；維持本專案原有 CSP。
+
+專案沒有呼叫 Chrome LanguageDetector；其他腳本的 Built-In AI 提示不是這個本地 LLM 的設定。來源需查看 DevTools 的腳本 URL，不能僅依 content_main.js 檔名判定是哪個擴充套件。
+
+官方參考：[Cloudflare Web Analytics 設定](https://developers.cloudflare.com/web-analytics/get-started/)、[Web IDL operation 接收者規則](https://webidl.spec.whatwg.org/#es-operations)。
 
 實機驗收與尚未完善項目見 `STATUS.md`，版本更新見 `CHANGELOG.md`。

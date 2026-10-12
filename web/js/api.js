@@ -2,7 +2,7 @@ export class ApiError extends Error {
   constructor(message, status=0, code='request_failed') {super(message);this.name='ApiError';this.status=status;this.code=code;}
 }
 export class Api {
-  constructor({fetchImpl=globalThis.fetch, onUnauthorized=()=>{}}={}) {this.fetchImpl=fetchImpl;this.onUnauthorized=onUnauthorized;}
+  constructor({fetchImpl=globalThis.fetch.bind(globalThis), onUnauthorized=()=>{}}={}) {this.fetchImpl=fetchImpl;this.onUnauthorized=onUnauthorized;}
   async request(path,{method='GET',body,headers={},timeout=120000}={}) {
     if(!path.startsWith('/v1/') || path.includes('://')) throw new ApiError('只允許同來源 API。',0,'invalid_path');
     const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeout);
